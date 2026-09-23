@@ -1,0 +1,133 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Description: >
+  Application Load Balancer for the SparrowX ECS application.
+
+Parameters:
+
+  EnvironmentName:
+    Type: String
+    Default: sparrowx
+    Description: Environment name used for resource naming.
+
+Resources:
+
+  # ============================================================
+  # ALB Security Group
+  # ============================================================
+
+  AlbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow public HTTP traffic to the application load balancer.
+      VpcId:
+        Fn::ImportValue: !Sub '${EnvironmentName}-VpcId'
+
+      SecurityGroupIngress:
+
+        - Description: Allow HTTP traffic from the internet.
+          IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+
+      SecurityGroupEgress:
+
+        - Description: Allow ALB to reach ECS services.
+          IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-alb-sg'
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+
+  # ============================================================
+  # Application Load Balancer
+  # ============================================================
+
+  ApplicationLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Sub '${EnvironmentName}-alb'
+
+      Scheme: internet-facing
+      Type: application
+      IpAddressType: ipv4
+
+      SecurityGroups:
+        - !Ref AlbSecurityGroup
+
+      Subnets:
+        - Fn::ImportValue: !Sub '${EnvironmentName}-PublicSubnetA'
+        - Fn::ImportValue: !Sub '${EnvironmentName}-PublicSubnetB'
+
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-alb'
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+
+  # ============================================================
+  # HTTP Listener
+  # ============================================================
+
+  HttpListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref ApplicationLoadBalancer
+
+      Port: 80
+      Protocol: HTTP
+
+      DefaultActions:
+        - Type: fixed-response
+          FixedResponseConfig:
+            StatusCode: '404'
+            ContentType: text/plain
+            MessageBody: >
+              Route not found.
+
+
+# ==============================================================
+# Outputs
+# ==============================================================
+
+Outputs:
+
+  LoadBalancerArn:
+    Description: ARN of the Application Load Balancer.
+    Value: !Ref ApplicationLoadBalancer
+    Export:
+      Name: !Sub '${EnvironmentName}-AlbArn'
+
+
+  LoadBalancerDnsName:
+    Description: DNS name of the Application Load Balancer.
+    Value: !GetAtt ApplicationLoadBalancer.DNSName
+    Export:
+      Name: !Sub '${EnvironmentName}-AlbDnsName'
+
+
+  LoadBalancerHostedZoneId:
+    Description: Canonical hosted zone ID of the Application Load Balancer.
+    Value: !GetAtt ApplicationLoadBalancer.CanonicalHostedZoneID
+    Export:
+      Name: !Sub '${EnvironmentName}-AlbHostedZoneId'
+
+
+  LoadBalancerSecurityGroupId:
+    Description: Security group ID of the Application Load Balancer.
+    Value: !Ref AlbSecurityGroup
+    Export:
+      Name: !Sub '${EnvironmentName}-AlbSecurityGroupId'
+
+
+  HttpListenerArn:
+    Description: ARN of the HTTP listener.
+    Value: !Ref HttpListener
+    Export:
+      Name: !Sub '${EnvironmentName}-AlbHttpListenerArn'

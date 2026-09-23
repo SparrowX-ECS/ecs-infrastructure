@@ -1,0 +1,152 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Description: >
+  ECR repositories for SparrowX ECS services.
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Default: sparrowx
+    Description: Environment name used for resource naming and exports.
+
+Resources:
+
+# ============================================================
+# Customer API ECR
+# ============================================================
+  CustomerApiRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: customer-api
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      ImageTagMutability: IMMUTABLE
+      EmptyOnDelete: true
+      Tags:
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: Service
+          Value: customer-api
+
+# ============================================================
+# Notification API ECR
+# ============================================================
+  NotificationApiRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: notification-api
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      ImageTagMutability: IMMUTABLE
+      EmptyOnDelete: true
+      Tags:
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: Service
+          Value: notification-api
+
+# ============================================================
+# Task API ECR
+# ============================================================
+  TaskApiRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: task-api
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      ImageTagMutability: IMMUTABLE
+      EmptyOnDelete: true
+      Tags:
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: Service
+          Value: task-api
+
+# ============================================================
+# Billing API ECR
+# ============================================================
+  BillingApiRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: billing-api
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      ImageTagMutability: IMMUTABLE
+      EmptyOnDelete: true
+      Tags:
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: Service
+          Value: billing-api
+
+# ============================================================
+# Reporting API ECR
+# ============================================================
+  ReportingApiRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: reporting-api
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      ImageTagMutability: IMMUTABLE
+      EmptyOnDelete: true
+      Tags:
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: Service
+          Value: reporting-api
+
+# ============================================================
+# Web Portal ECR
+# ============================================================
+  WebPortalRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: web-portal
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      ImageTagMutability: IMMUTABLE
+      EmptyOnDelete: true
+      Tags:
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: Service
+          Value: web-portal
+
+Outputs:
+
+  CustomerApiRepositoryUri:
+    Description: ECR repository URI for customer-api
+    Value: !GetAtt CustomerApiRepository.RepositoryUri
+    Export:
+      Name: !Sub '${EnvironmentName}-CustomerApiRepositoryUri'
+
+  NotificationApiRepositoryUri:
+    Description: ECR repository URI for notification-api
+    Value: !GetAtt NotificationApiRepository.RepositoryUri
+    Export:
+      Name: !Sub '${EnvironmentName}-NotificationApiRepositoryUri'
+
+  TaskApiRepositoryUri:
+    Description: ECR repository URI for task-api
+    Value: !GetAtt TaskApiRepository.RepositoryUri
+    Export:
+      Name: !Sub '${EnvironmentName}-TaskApiRepositoryUri'
+
+  BillingApiRepositoryUri:
+    Description: ECR repository URI for billing-api
+    Value: !GetAtt BillingApiRepository.RepositoryUri
+    Export:
+      Name: !Sub '${EnvironmentName}-BillingApiRepositoryUri'
+
+  ReportingApiRepositoryUri:
+    Description: ECR repository URI for reporting-api
+    Value: !GetAtt ReportingApiRepository.RepositoryUri
+    Export:
+      Name: !Sub '${EnvironmentName}-ReportingApiRepositoryUri'
+
+  WebPortalRepositoryUri:
+    Description: ECR repository URI for web-portal
+    Value: !GetAtt WebPortalRepository.RepositoryUri
+    Export:
+      Name: !Sub '${EnvironmentName}-WebPortalRepositoryUri'

@@ -1,0 +1,33 @@
+environment:
+  name: sparrowx
+  region: eu-west-1
+
+network:
+  vpc_cidr: 10.0.0.0/16
+
+  availability_zones:
+    a: eu-west-1a
+    b: eu-west-1b
+
+  public_subnets:
+    a: 10.0.1.0/24
+    b: 10.0.2.0/24
+
+  private_subnets:
+    a: 10.0.11.0/24
+    b: 10.0.12.0/24
+
+database:
+  engine: postgres
+  engine_version: "16"
+  instance_class: db.t4g.micro
+  allocated_storage: 20
+  backup_retention_days: 1
+  multi_az: false
+
+ecs:
+  cluster_name: sparrowx-cluster
+
+alb:
+  scheme: internet-facing
+

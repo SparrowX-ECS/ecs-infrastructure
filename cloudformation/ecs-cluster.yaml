@@ -1,0 +1,51 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Description: >
+  ECS Fargate cluster for the SparrowX application.
+
+Parameters:
+
+  EnvironmentName:
+    Type: String
+    Default: sparrowx
+    Description: Environment name used for resource naming.
+
+Resources:
+
+  # ============================================================
+  # ECS Cluster
+  # ============================================================
+
+  EcsCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Sub '${EnvironmentName}-cluster'
+
+      ClusterSettings:
+        - Name: containerInsights
+          Value: enabled
+
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-cluster'
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+
+# ==============================================================
+# Outputs
+# ==============================================================
+
+Outputs:
+
+  EcsClusterName:
+    Description: Name of the ECS cluster.
+    Value: !Ref EcsCluster
+    Export:
+      Name: !Sub '${EnvironmentName}-EcsClusterName'
+
+  EcsClusterArn:
+    Description: ARN of the ECS cluster.
+    Value: !GetAtt EcsCluster.Arn
+    Export:
+      Name: !Sub '${EnvironmentName}-EcsClusterArn'

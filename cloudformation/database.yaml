@@ -1,0 +1,505 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Description: >
+  PostgreSQL databases for SparrowX ECS services.
+
+Parameters:
+
+  EnvironmentName:
+    Type: String
+    Default: sparrowx
+    Description: Environment name used for resource naming.
+
+  DBInstanceClass:
+    Type: String
+    Default: db.t4g.micro
+    Description: Smallest practical PostgreSQL RDS instance class for this project.
+
+  DBAllocatedStorage:
+    Type: Number
+    Default: 20
+    Description: Allocated storage in GiB.
+
+  DBEngineVersion:
+    Type: String
+    Default: '16'
+    Description: PostgreSQL major engine version.
+
+Resources:
+
+  # ============================================================
+  # Customer API
+  # ============================================================
+
+  CustomerDatabaseSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: PostgreSQL access for customer-api.
+      VpcId:
+        Fn::ImportValue: !Sub '${EnvironmentName}-VpcId'
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-customer-db-sg'
+        - Key: Service
+          Value: customer-api
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  CustomerDatabaseSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub '${EnvironmentName}/customer-api/database'
+      Description: PostgreSQL credentials for customer-api.
+      GenerateSecretString:
+        SecretStringTemplate: |
+          {
+            "username": "customer_admin"
+          }
+        GenerateStringKey: password
+        PasswordLength: 32
+        ExcludeCharacters: '"@/\'
+
+      Tags:
+        - Key: Service
+          Value: customer-api
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  CustomerDatabaseSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Private subnets for customer-api database.
+      SubnetIds:
+        - Fn::ImportValue: !Sub '${EnvironmentName}-PrivateSubnetA'
+        - Fn::ImportValue: !Sub '${EnvironmentName}-PrivateSubnetB'
+      Tags:
+        - Key: Service
+          Value: customer-api
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  CustomerDatabase:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Snapshot
+    UpdateReplacePolicy: Snapshot
+    Properties:
+      DBInstanceIdentifier: !Sub '${EnvironmentName}-customer-db'
+
+      Engine: postgres
+      EngineVersion: !Ref DBEngineVersion
+      DBInstanceClass: !Ref DBInstanceClass
+
+      AllocatedStorage: !Ref DBAllocatedStorage
+      StorageType: gp3
+      StorageEncrypted: true
+
+      DBName: customerdb
+
+      MasterUsername: !Sub '{{resolve:secretsmanager:${CustomerDatabaseSecret}:SecretString:username}}'
+      MasterUserPassword: !Sub '{{resolve:secretsmanager:${CustomerDatabaseSecret}:SecretString:password}}'
+
+      DBSubnetGroupName: !Ref CustomerDatabaseSubnetGroup
+      VPCSecurityGroups:
+        - !Ref CustomerDatabaseSecurityGroup
+
+      PubliclyAccessible: false
+
+      BackupRetentionPeriod: 1
+      CopyTagsToSnapshot: true
+
+      MultiAZ: false
+      AutoMinorVersionUpgrade: true
+      DeletionProtection: false
+
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-customer-db'
+        - Key: Service
+          Value: customer-api
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+
+  # ============================================================
+  # Notification API
+  # ============================================================
+
+  NotificationDatabaseSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: PostgreSQL access for notification-api.
+      VpcId:
+        Fn::ImportValue: !Sub '${EnvironmentName}-VpcId'
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-notification-db-sg'
+        - Key: Service
+          Value: notification-api
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  NotificationDatabaseSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub '${EnvironmentName}/notification-api/database'
+      Description: PostgreSQL credentials for notification-api.
+      GenerateSecretString:
+        SecretStringTemplate: |
+          {
+            "username": "notification_admin"
+          }
+        GenerateStringKey: password
+        PasswordLength: 32
+        ExcludeCharacters: '"@/\'
+
+      Tags:
+        - Key: Service
+          Value: notification-api
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  NotificationDatabaseSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Private subnets for notification-api database.
+      SubnetIds:
+        - Fn::ImportValue: !Sub '${EnvironmentName}-PrivateSubnetA'
+        - Fn::ImportValue: !Sub '${EnvironmentName}-PrivateSubnetB'
+      Tags:
+        - Key: Service
+          Value: notification-api
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  NotificationDatabase:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Snapshot
+    UpdateReplacePolicy: Snapshot
+    Properties:
+      DBInstanceIdentifier: !Sub '${EnvironmentName}-notification-db'
+
+      Engine: postgres
+      EngineVersion: !Ref DBEngineVersion
+      DBInstanceClass: !Ref DBInstanceClass
+
+      AllocatedStorage: !Ref DBAllocatedStorage
+      StorageType: gp3
+      StorageEncrypted: true
+
+      DBName: notificationdb
+
+      MasterUsername: !Sub '{{resolve:secretsmanager:${NotificationDatabaseSecret}:SecretString:username}}'
+      MasterUserPassword: !Sub '{{resolve:secretsmanager:${NotificationDatabaseSecret}:SecretString:password}}'
+
+      DBSubnetGroupName: !Ref NotificationDatabaseSubnetGroup
+      VPCSecurityGroups:
+        - !Ref NotificationDatabaseSecurityGroup
+
+      PubliclyAccessible: false
+
+      BackupRetentionPeriod: 1
+      CopyTagsToSnapshot: true
+
+      MultiAZ: false
+      AutoMinorVersionUpgrade: true
+      DeletionProtection: false
+
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-notification-db'
+        - Key: Service
+          Value: notification-api
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+
+  # ============================================================
+  # Task API
+  # ============================================================
+
+  TaskDatabaseSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: PostgreSQL access for task-api.
+      VpcId:
+        Fn::ImportValue: !Sub '${EnvironmentName}-VpcId'
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-task-db-sg'
+        - Key: Service
+          Value: task-api
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  TaskDatabaseSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub '${EnvironmentName}/task-api/database'
+      Description: PostgreSQL credentials for task-api.
+      GenerateSecretString:
+        SecretStringTemplate: |
+          {
+            "username": "task_admin"
+          }
+        GenerateStringKey: password
+        PasswordLength: 32
+        ExcludeCharacters: '"@/\'
+
+      Tags:
+        - Key: Service
+          Value: task-api
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  TaskDatabaseSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Private subnets for task-api database.
+      SubnetIds:
+        - Fn::ImportValue: !Sub '${EnvironmentName}-PrivateSubnetA'
+        - Fn::ImportValue: !Sub '${EnvironmentName}-PrivateSubnetB'
+      Tags:
+        - Key: Service
+          Value: task-api
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  TaskDatabase:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Snapshot
+    UpdateReplacePolicy: Snapshot
+    Properties:
+      DBInstanceIdentifier: !Sub '${EnvironmentName}-task-db'
+
+      Engine: postgres
+      EngineVersion: !Ref DBEngineVersion
+      DBInstanceClass: !Ref DBInstanceClass
+
+      AllocatedStorage: !Ref DBAllocatedStorage
+      StorageType: gp3
+      StorageEncrypted: true
+
+      DBName: taskdb
+
+      MasterUsername: !Sub '{{resolve:secretsmanager:${TaskDatabaseSecret}:SecretString:username}}'
+      MasterUserPassword: !Sub '{{resolve:secretsmanager:${TaskDatabaseSecret}:SecretString:password}}'
+
+      DBSubnetGroupName: !Ref TaskDatabaseSubnetGroup
+      VPCSecurityGroups:
+        - !Ref TaskDatabaseSecurityGroup
+
+      PubliclyAccessible: false
+
+      BackupRetentionPeriod: 1
+      CopyTagsToSnapshot: true
+
+      MultiAZ: false
+      AutoMinorVersionUpgrade: true
+      DeletionProtection: false
+
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-task-db'
+        - Key: Service
+          Value: task-api
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+
+  # ============================================================
+  # Billing API
+  # ============================================================
+
+  BillingDatabaseSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: PostgreSQL access for billing-api.
+      VpcId:
+        Fn::ImportValue: !Sub '${EnvironmentName}-VpcId'
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-billing-db-sg'
+        - Key: Service
+          Value: billing-api
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  BillingDatabaseSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub '${EnvironmentName}/billing-api/database'
+      Description: PostgreSQL credentials for billing-api.
+      GenerateSecretString:
+        SecretStringTemplate: |
+          {
+            "username": "billing_admin"
+          }
+        GenerateStringKey: password
+        PasswordLength: 32
+        ExcludeCharacters: '"@/\'
+
+      Tags:
+        - Key: Service
+          Value: billing-api
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  BillingDatabaseSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Private subnets for billing-api database.
+      SubnetIds:
+        - Fn::ImportValue: !Sub '${EnvironmentName}-PrivateSubnetA'
+        - Fn::ImportValue: !Sub '${EnvironmentName}-PrivateSubnetB'
+      Tags:
+        - Key: Service
+          Value: billing-api
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  BillingDatabase:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Snapshot
+    UpdateReplacePolicy: Snapshot
+    Properties:
+      DBInstanceIdentifier: !Sub '${EnvironmentName}-billing-db'
+
+      Engine: postgres
+      EngineVersion: !Ref DBEngineVersion
+      DBInstanceClass: !Ref DBInstanceClass
+
+      AllocatedStorage: !Ref DBAllocatedStorage
+      StorageType: gp3
+      StorageEncrypted: true
+
+      DBName: billingdb
+
+      MasterUsername: !Sub '{{resolve:secretsmanager:${BillingDatabaseSecret}:SecretString:username}}'
+      MasterUserPassword: !Sub '{{resolve:secretsmanager:${BillingDatabaseSecret}:SecretString:password}}'
+
+      DBSubnetGroupName: !Ref BillingDatabaseSubnetGroup
+      VPCSecurityGroups:
+        - !Ref BillingDatabaseSecurityGroup
+
+      PubliclyAccessible: false
+
+      BackupRetentionPeriod: 1
+      CopyTagsToSnapshot: true
+
+      MultiAZ: false
+      AutoMinorVersionUpgrade: true
+      DeletionProtection: false
+
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-billing-db'
+        - Key: Service
+          Value: billing-api
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+
+# ==============================================================
+# Outputs
+# ==============================================================
+
+Outputs:
+
+  CustomerDatabaseEndpoint:
+    Description: Customer API PostgreSQL endpoint.
+    Value: !GetAtt CustomerDatabase.Endpoint.Address
+    Export:
+      Name: !Sub '${EnvironmentName}-CustomerDatabaseEndpoint'
+
+  CustomerDatabasePort:
+    Description: Customer API PostgreSQL port.
+    Value: !GetAtt CustomerDatabase.Endpoint.Port
+    Export:
+      Name: !Sub '${EnvironmentName}-CustomerDatabasePort'
+
+  CustomerDatabaseSecretArn:
+    Description: Customer API database credentials secret ARN.
+    Value: !Ref CustomerDatabaseSecret
+    Export:
+      Name: !Sub '${EnvironmentName}-CustomerDatabaseSecretArn'
+
+  CustomerDatabaseSecurityGroupId:
+    Description: Customer API database security group ID.
+    Value: !Ref CustomerDatabaseSecurityGroup
+    Export:
+      Name: !Sub '${EnvironmentName}-CustomerDatabaseSecurityGroupId'
+
+
+  NotificationDatabaseEndpoint:
+    Description: Notification API PostgreSQL endpoint.
+    Value: !GetAtt NotificationDatabase.Endpoint.Address
+    Export:
+      Name: !Sub '${EnvironmentName}-NotificationDatabaseEndpoint'
+
+  NotificationDatabasePort:
+    Description: Notification API PostgreSQL port.
+    Value: !GetAtt NotificationDatabase.Endpoint.Port
+    Export:
+      Name: !Sub '${EnvironmentName}-NotificationDatabasePort'
+
+  NotificationDatabaseSecretArn:
+    Description: Notification API database credentials secret ARN.
+    Value: !Ref NotificationDatabaseSecret
+    Export:
+      Name: !Sub '${EnvironmentName}-NotificationDatabaseSecretArn'
+
+  NotificationDatabaseSecurityGroupId:
+    Description: Notification API database security group ID.
+    Value: !Ref NotificationDatabaseSecurityGroup
+    Export:
+      Name: !Sub '${EnvironmentName}-NotificationDatabaseSecurityGroupId'
+
+
+  TaskDatabaseEndpoint:
+    Description: Task API PostgreSQL endpoint.
+    Value: !GetAtt TaskDatabase.Endpoint.Address
+    Export:
+      Name: !Sub '${EnvironmentName}-TaskDatabaseEndpoint'
+
+  TaskDatabasePort:
+    Description: Task API PostgreSQL port.
+    Value: !GetAtt TaskDatabase.Endpoint.Port
+    Export:
+      Name: !Sub '${EnvironmentName}-TaskDatabasePort'
+
+  TaskDatabaseSecretArn:
+    Description: Task API database credentials secret ARN.
+    Value: !Ref TaskDatabaseSecret
+    Export:
+      Name: !Sub '${EnvironmentName}-TaskDatabaseSecretArn'
+
+  TaskDatabaseSecurityGroupId:
+    Description: Task API database security group ID.
+    Value: !Ref TaskDatabaseSecurityGroup
+    Export:
+      Name: !Sub '${EnvironmentName}-TaskDatabaseSecurityGroupId'
+
+
+  BillingDatabaseEndpoint:
+    Description: Billing API PostgreSQL endpoint.
+    Value: !GetAtt BillingDatabase.Endpoint.Address
+    Export:
+      Name: !Sub '${EnvironmentName}-BillingDatabaseEndpoint'
+
+  BillingDatabasePort:
+    Description: Billing API PostgreSQL port.
+    Value: !GetAtt BillingDatabase.Endpoint.Port
+    Export:
+      Name: !Sub '${EnvironmentName}-BillingDatabasePort'
+
+  BillingDatabaseSecretArn:
+    Description: Billing API database credentials secret ARN.
+    Value: !Ref BillingDatabaseSecret
+    Export:
+      Name: !Sub '${EnvironmentName}-BillingDatabaseSecretArn'
+
+  BillingDatabaseSecurityGroupId:
+    Description: Billing API database security group ID.
+    Value: !Ref BillingDatabaseSecurityGroup
+    Export:
+      Name: !Sub '${EnvironmentName}-BillingDatabaseSecurityGroupId'

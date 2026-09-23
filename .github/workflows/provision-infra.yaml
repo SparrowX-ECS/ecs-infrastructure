@@ -1,0 +1,88 @@
+name: Provision Infrastructure
+
+on:
+  pull_request:
+    paths:
+      - 'cloudformation/**'
+      - 'parameters/**'
+      - 'scripts/**'
+
+  push:
+    branches:
+      - main
+    paths:
+      - 'cloudformation/**'
+      - 'parameters/**'
+      - 'scripts/**'
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  AWS_REGION: eu-west-1
+
+jobs:
+
+  # ----------------------------------------
+  # Validate
+  # ----------------------------------------
+
+  validate:
+    name: Validate CloudFormation
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install cfn-lint
+        run: pip install cfn-lint
+
+      - name: Run cfn-lint
+        run: cfn-lint cloudformation/*.yaml
+
+      - name: Validate CloudFormation templates
+        run: |
+          for template in cloudformation/*.yaml; do
+            echo "Validating $template"
+
+            aws cloudformation validate-template \
+              --template-body file://"$template"
+          done
+
+
+  # ----------------------------------------
+  # Deploy
+  # ----------------------------------------
+
+  deploy:
+    name: Deploy Infrastructure
+    needs: validate
+
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Verify AWS identity
+        run: aws sts get-caller-identity
+
+      - name: Deploy infrastructure
+        run: ./scripts/deploy.sh

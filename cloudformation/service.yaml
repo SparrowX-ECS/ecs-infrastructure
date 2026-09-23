@@ -1,0 +1,479 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Description: >
+  Reusable ECS Fargate service template for SparrowX applications.
+
+Parameters:
+
+  # ============================================================
+  # General
+  # ============================================================
+
+  EnvironmentName:
+    Type: String
+    Default: sparrowx
+
+  ServiceName:
+    Type: String
+    Description: Name of the application service.
+
+  ImageTag:
+    Type: String
+    Description: Docker image tag to deploy.
+
+  EcrRepository:
+    Type: String
+    Description: ECR repository name.
+
+  ContainerPort:
+    Type: Number
+    Default: 8000
+    Description: Port exposed by the application container.
+
+  Cpu:
+    Type: String
+    Default: '256'
+    AllowedValues:
+      - '256'
+      - '512'
+      - '1024'
+      - '2048'
+      - '4096'
+
+  Memory:
+    Type: String
+    Default: '512'
+
+  DesiredCount:
+    Type: Number
+    Default: 1
+    MinValue: 1
+
+  # ============================================================
+  # ALB
+  # ============================================================
+
+  PathPattern:
+    Type: String
+    Description: ALB path pattern routed to this service.
+
+  ListenerRulePriority:
+    Type: Number
+    Description: Unique ALB listener rule priority.
+
+  HealthCheckPath:
+    Type: String
+    Default: /health
+    Description: HTTP health check path.
+
+  # ============================================================
+  # Database
+  # ============================================================
+
+  DatabaseSecretArn:
+    Type: String
+    Default: ''
+    Description: >
+      ARN of the database secret. Leave empty for services
+      without a database.
+
+  DatabaseSecurityGroupId:
+    Type: String
+    Default: ''
+    Description: >
+      Database security group ID. Leave empty for services
+      without a database.
+
+  DatabaseName:
+    Type: String
+    Default: ''
+    Description: Database name used by the service.
+
+Conditions:
+
+  HasDatabase:
+    !Not
+      - !Equals
+        - !Ref DatabaseSecretArn
+        - ''
+
+# ==============================================================
+# Resources
+# ==============================================================
+
+Resources:
+
+  # ============================================================
+  # ECS Task Security Group
+  # ============================================================
+
+  ServiceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub 'Security group for ${ServiceName} ECS tasks.'
+      VpcId:
+        Fn::ImportValue: !Sub '${EnvironmentName}-VpcId'
+
+      SecurityGroupIngress:
+
+        - Description: Allow traffic from the ALB.
+          IpProtocol: tcp
+          FromPort: !Ref ContainerPort
+          ToPort: !Ref ContainerPort
+          SourceSecurityGroupId:
+            Fn::ImportValue: !Sub '${EnvironmentName}-AlbSecurityGroupId'
+
+      SecurityGroupEgress:
+
+        - Description: Allow outbound traffic.
+          IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-${ServiceName}-sg'
+        - Key: Service
+          Value: !Ref ServiceName
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+
+  # ============================================================
+  # Allow ECS service to access its own database
+  # ============================================================
+
+  DatabaseIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: HasDatabase
+    Properties:
+      GroupId: !Ref DatabaseSecurityGroupId
+      IpProtocol: tcp
+      FromPort: 5432
+      ToPort: 5432
+      SourceSecurityGroupId: !Ref ServiceSecurityGroup
+
+
+  # ============================================================
+  # CloudWatch Logs
+  # ============================================================
+
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/ecs/${EnvironmentName}/${ServiceName}'
+      RetentionInDays: 7
+
+      Tags:
+        - Key: Service
+          Value: !Ref ServiceName
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+
+  # ============================================================
+  # ECS Task Execution Role
+  # ============================================================
+
+  TaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: !Sub 'ECS execution role for ${ServiceName}.'
+
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ecs-tasks.amazonaws.com
+            Action:
+              - sts:AssumeRole
+
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+
+      Tags:
+        - Key: Service
+          Value: !Ref ServiceName
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+
+  # ============================================================
+  # Allow ECS execution role to read database secret
+  # ============================================================
+
+  DatabaseSecretPolicy:
+    Type: AWS::IAM::Policy
+    Condition: HasDatabase
+    Properties:
+      PolicyName: !Sub '${ServiceName}-database-secret-access'
+
+      Roles:
+        - !Ref TaskExecutionRole
+
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+
+          - Effect: Allow
+            Action:
+              - secretsmanager:GetSecretValue
+            Resource:
+              - !Ref DatabaseSecretArn
+
+
+  # ============================================================
+  # ECS Task Role
+  # ============================================================
+
+  TaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: !Sub 'Application task role for ${ServiceName}.'
+
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ecs-tasks.amazonaws.com
+            Action:
+              - sts:AssumeRole
+
+      Tags:
+        - Key: Service
+          Value: !Ref ServiceName
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+
+  # ============================================================
+  # ECS Task Definition
+  # ============================================================
+
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+
+      Family: !Sub '${EnvironmentName}-${ServiceName}'
+
+      NetworkMode: awsvpc
+
+      RequiresCompatibilities:
+        - FARGATE
+
+      Cpu: !Ref Cpu
+      Memory: !Ref Memory
+
+      ExecutionRoleArn: !GetAtt TaskExecutionRole.Arn
+      TaskRoleArn: !GetAtt TaskRole.Arn
+
+      ContainerDefinitions:
+
+        - Name: !Ref ServiceName
+
+          Image: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${EcrRepository}:${ImageTag}'
+
+          Essential: true
+
+          PortMappings:
+            - ContainerPort: !Ref ContainerPort
+              Protocol: tcp
+
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: ecs
+
+          Environment:
+
+            - Name: SERVICE_NAME
+              Value: !Ref ServiceName
+
+          Secrets:
+
+            - !If
+              - HasDatabase
+              - Name: DB_USERNAME
+                ValueFrom: !Sub '${DatabaseSecretArn}:username::'
+              - !Ref AWS::NoValue
+
+            - !If
+              - HasDatabase
+              - Name: DB_PASSWORD
+                ValueFrom: !Sub '${DatabaseSecretArn}:password::'
+              - !Ref AWS::NoValue
+
+          HealthCheck:
+            Command:
+              - CMD-SHELL
+              - !Sub 'curl -f http://localhost:${ContainerPort}${HealthCheckPath} || exit 1'
+            Interval: 30
+            Timeout: 5
+            Retries: 3
+            StartPeriod: 30
+
+
+  # ============================================================
+  # ALB Target Group
+  # ============================================================
+
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+
+      Name: !Sub '${EnvironmentName}-${ServiceName}'
+
+      VpcId:
+        Fn::ImportValue: !Sub '${EnvironmentName}-VpcId'
+
+      TargetType: ip
+
+      Protocol: HTTP
+      Port: !Ref ContainerPort
+
+      HealthCheckEnabled: true
+      HealthCheckProtocol: HTTP
+      HealthCheckPath: !Ref HealthCheckPath
+      HealthCheckPort: traffic-port
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 3
+
+      Matcher:
+        HttpCode: '200-399'
+
+      Tags:
+        - Key: Service
+          Value: !Ref ServiceName
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+
+  # ============================================================
+  # ALB Listener Rule
+  # ============================================================
+
+  ListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+
+      ListenerArn:
+        Fn::ImportValue: !Sub '${EnvironmentName}-AlbHttpListenerArn'
+
+      Priority: !Ref ListenerRulePriority
+
+      Conditions:
+
+        - Field: path-pattern
+          PathPatternConfig:
+            Values:
+              - !Ref PathPattern
+
+      Actions:
+
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroup
+
+
+  # ============================================================
+  # ECS Fargate Service
+  # ============================================================
+
+  EcsService:
+    Type: AWS::ECS::Service
+
+    DependsOn:
+      - ListenerRule
+
+    Properties:
+
+      ServiceName: !Ref ServiceName
+
+      Cluster:
+        Fn::ImportValue: !Sub '${EnvironmentName}-EcsClusterArn'
+
+      LaunchType: FARGATE
+
+      PlatformVersion: LATEST
+
+      DesiredCount: !Ref DesiredCount
+
+      TaskDefinition: !Ref TaskDefinition
+
+      HealthCheckGracePeriodSeconds: 60
+
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 100
+
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+
+          SecurityGroups:
+            - !Ref ServiceSecurityGroup
+
+          Subnets:
+
+            - Fn::ImportValue: !Sub '${EnvironmentName}-PrivateSubnetA'
+
+            - Fn::ImportValue: !Sub '${EnvironmentName}-PrivateSubnetB'
+
+      LoadBalancers:
+
+        - ContainerName: !Ref ServiceName
+          ContainerPort: !Ref ContainerPort
+          TargetGroupArn: !Ref TargetGroup
+
+      Tags:
+        - Key: Service
+          Value: !Ref ServiceName
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+
+# ==============================================================
+# Outputs
+# ==============================================================
+
+Outputs:
+
+  ServiceName:
+    Description: ECS service name.
+    Value: !Ref EcsService
+    Export:
+      Name: !Sub '${EnvironmentName}-${ServiceName}-EcsServiceName'
+
+
+  TaskDefinitionArn:
+    Description: ECS task definition ARN.
+    Value: !Ref TaskDefinition
+    Export:
+      Name: !Sub '${EnvironmentName}-${ServiceName}-TaskDefinitionArn'
+
+
+  TargetGroupArn:
+    Description: ALB target group ARN.
+    Value: !Ref TargetGroup
+    Export:
+      Name: !Sub '${EnvironmentName}-${ServiceName}-TargetGroupArn'
+
+
+  ServiceSecurityGroupId:
+    Description: ECS service security group ID.
+    Value: !Ref ServiceSecurityGroup
+    Export:
+      Name: !Sub '${EnvironmentName}-${ServiceName}-SecurityGroupId'
+
+
+  LogGroupName:
+    Description: CloudWatch log group name.
+    Value: !Ref LogGroup
+    Export:
+      Name: !Sub '${EnvironmentName}-${ServiceName}-LogGroupName'
