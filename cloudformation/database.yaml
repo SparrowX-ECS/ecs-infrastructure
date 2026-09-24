@@ -25,6 +25,21 @@ Parameters:
     Default: '16'
     Description: PostgreSQL major engine version.
 
+  DBBackupRetentionDays:
+    Type: Number
+    Default: 1
+    MinValue: 0
+    MaxValue: 35
+    Description: Number of days to retain automated backups.
+
+  DBMultiAZ:
+    Type: String
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Whether to deploy each database in multiple Availability Zones.
+
 Resources:
 
   # ============================================================
@@ -104,10 +119,10 @@ Resources:
 
       PubliclyAccessible: false
 
-      BackupRetentionPeriod: 1
+      BackupRetentionPeriod: !Ref DBBackupRetentionDays
       CopyTagsToSnapshot: true
 
-      MultiAZ: false
+      MultiAZ: !Ref DBMultiAZ
       AutoMinorVersionUpgrade: true
       DeletionProtection: false
 
@@ -197,10 +212,10 @@ Resources:
 
       PubliclyAccessible: false
 
-      BackupRetentionPeriod: 1
+      BackupRetentionPeriod: !Ref DBBackupRetentionDays
       CopyTagsToSnapshot: true
 
-      MultiAZ: false
+      MultiAZ: !Ref DBMultiAZ
       AutoMinorVersionUpgrade: true
       DeletionProtection: false
 
@@ -290,10 +305,10 @@ Resources:
 
       PubliclyAccessible: false
 
-      BackupRetentionPeriod: 1
+      BackupRetentionPeriod: !Ref DBBackupRetentionDays
       CopyTagsToSnapshot: true
 
-      MultiAZ: false
+      MultiAZ: !Ref DBMultiAZ
       AutoMinorVersionUpgrade: true
       DeletionProtection: false
 
@@ -383,10 +398,10 @@ Resources:
 
       PubliclyAccessible: false
 
-      BackupRetentionPeriod: 1
+      BackupRetentionPeriod: !Ref DBBackupRetentionDays
       CopyTagsToSnapshot: true
 
-      MultiAZ: false
+      MultiAZ: !Ref DBMultiAZ
       AutoMinorVersionUpgrade: true
       DeletionProtection: false
 

@@ -3,6 +3,12 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: >
   Reusable ECS Fargate service template for SparrowX applications.
 
+Metadata:
+  cfn-lint:
+    config:
+      ignore_checks:
+        - W1030
+
 Parameters:
 
   # ============================================================
@@ -19,11 +25,8 @@ Parameters:
 
   ImageTag:
     Type: String
-    Description: Docker image tag to deploy.
-
-  EcrRepository:
-    Type: String
-    Description: ECR repository name.
+    AllowedPattern: '^[0-9a-fA-F]{7,64}$'
+    Description: Immutable Git commit SHA used as the Docker image tag.
 
   ContainerPort:
     Type: Number
@@ -84,10 +87,40 @@ Parameters:
       Database security group ID. Leave empty for services
       without a database.
 
+  DatabaseHost:
+    Type: String
+    Default: ''
+    Description: Database endpoint hostname for services with a database.
+
+  DatabasePort:
+    Type: String
+    Default: '5432'
+    Description: Database port for services with a database.
+
   DatabaseName:
     Type: String
     Default: ''
-    Description: Database name used by the service.
+    Description: Database name for services with a database.
+
+  CustomerApiUrl:
+    Type: String
+    Default: ''
+    Description: Optional Customer API base URL for reporting services.
+
+  TaskApiUrl:
+    Type: String
+    Default: ''
+    Description: Optional Task API base URL for reporting services.
+
+  BillingApiUrl:
+    Type: String
+    Default: ''
+    Description: Optional Billing API base URL for reporting services.
+
+  CorsAllowOrigins:
+    Type: String
+    Default: '*'
+    Description: Comma-separated browser origins allowed by the API.
 
 Conditions:
 
@@ -96,6 +129,10 @@ Conditions:
       - !Equals
         - !Ref DatabaseSecretArn
         - ''
+
+  HasCustomerApiUrl: !Not [!Equals [!Ref CustomerApiUrl, '']]
+  HasTaskApiUrl: !Not [!Equals [!Ref TaskApiUrl, '']]
+  HasBillingApiUrl: !Not [!Equals [!Ref BillingApiUrl, '']]
 
 # ==============================================================
 # Resources
@@ -137,6 +174,16 @@ Resources:
         - Key: Environment
           Value: !Ref EnvironmentName
 
+  ServiceToServiceIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref ServiceSecurityGroup
+      IpProtocol: tcp
+      FromPort: !Ref ContainerPort
+      ToPort: !Ref ContainerPort
+      SourceSecurityGroupId: !Ref ServiceSecurityGroup
+      Description: Allow traffic from other ECS services through Service Connect.
+
 
   # ============================================================
   # Allow ECS service to access its own database
@@ -150,7 +197,7 @@ Resources:
       IpProtocol: tcp
       FromPort: 5432
       ToPort: 5432
-      SourceSecurityGroupId: !Ref ServiceSecurityGroup
+      SourceSecurityGroupId: !GetAtt ServiceSecurityGroup.GroupId
 
 
   # ============================================================
@@ -274,12 +321,13 @@ Resources:
 
         - Name: !Ref ServiceName
 
-          Image: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${EcrRepository}:${ImageTag}'
+          Image: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ServiceName}:${ImageTag}'
 
           Essential: true
 
           PortMappings:
             - ContainerPort: !Ref ContainerPort
+              Name: http
               Protocol: tcp
 
           LogConfiguration:
@@ -294,6 +342,45 @@ Resources:
             - Name: SERVICE_NAME
               Value: !Ref ServiceName
 
+            - Name: CORS_ALLOW_ORIGINS
+              Value: !Ref CorsAllowOrigins
+
+            - !If
+              - HasCustomerApiUrl
+              - Name: CUSTOMER_API_URL
+                Value: !Ref CustomerApiUrl
+              - !Ref AWS::NoValue
+
+            - !If
+              - HasTaskApiUrl
+              - Name: TASK_API_URL
+                Value: !Ref TaskApiUrl
+              - !Ref AWS::NoValue
+
+            - !If
+              - HasBillingApiUrl
+              - Name: BILLING_API_URL
+                Value: !Ref BillingApiUrl
+              - !Ref AWS::NoValue
+
+            - !If
+              - HasDatabase
+              - Name: DB_HOST
+                Value: !Ref DatabaseHost
+              - !Ref AWS::NoValue
+
+            - !If
+              - HasDatabase
+              - Name: DB_PORT
+                Value: !Ref DatabasePort
+              - !Ref AWS::NoValue
+
+            - !If
+              - HasDatabase
+              - Name: DB_NAME
+                Value: !Ref DatabaseName
+              - !Ref AWS::NoValue
+
           Secrets:
 
             - !If
@@ -307,16 +394,6 @@ Resources:
               - Name: DB_PASSWORD
                 ValueFrom: !Sub '${DatabaseSecretArn}:password::'
               - !Ref AWS::NoValue
-
-          HealthCheck:
-            Command:
-              - CMD-SHELL
-              - !Sub 'curl -f http://localhost:${ContainerPort}${HealthCheckPath} || exit 1'
-            Interval: 30
-            Timeout: 5
-            Retries: 3
-            StartPeriod: 30
-
 
   # ============================================================
   # ALB Target Group
@@ -400,17 +477,27 @@ Resources:
 
       LaunchType: FARGATE
 
-      PlatformVersion: LATEST
-
       DesiredCount: !Ref DesiredCount
 
       TaskDefinition: !Ref TaskDefinition
+
+      ServiceConnectConfiguration:
+        Enabled: true
+        Services:
+          - PortName: http
+            DiscoveryName: !Ref ServiceName
+            ClientAliases:
+              - Port: !Ref ContainerPort
+                DnsName: !Ref ServiceName
 
       HealthCheckGracePeriodSeconds: 60
 
       DeploymentConfiguration:
         MaximumPercent: 200
         MinimumHealthyPercent: 100
+        DeploymentCircuitBreaker:
+          Enable: true
+          Rollback: true
 
       NetworkConfiguration:
         AwsvpcConfiguration:

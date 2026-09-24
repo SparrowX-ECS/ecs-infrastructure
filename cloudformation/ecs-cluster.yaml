@@ -21,6 +21,9 @@ Resources:
     Properties:
       ClusterName: !Sub '${EnvironmentName}-cluster'
 
+      ServiceConnectDefaults:
+        Namespace: !GetAtt ServiceDiscoveryNamespace.Arn
+
       ClusterSettings:
         - Name: containerInsights
           Value: enabled
@@ -30,6 +33,14 @@ Resources:
           Value: !Sub '${EnvironmentName}-cluster'
         - Key: Environment
           Value: !Ref EnvironmentName
+
+  ServiceDiscoveryNamespace:
+    Type: AWS::ServiceDiscovery::PrivateDnsNamespace
+    Properties:
+      Name: !Sub '${EnvironmentName}.local'
+      Vpc:
+        Fn::ImportValue: !Sub '${EnvironmentName}-VpcId'
+      Description: !Sub 'Private ECS service discovery namespace for ${EnvironmentName}.'
 
 
 # ==============================================================

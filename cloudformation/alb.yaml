@@ -10,6 +10,14 @@ Parameters:
     Default: sparrowx
     Description: Environment name used for resource naming.
 
+  Scheme:
+    Type: String
+    Default: internet-facing
+    AllowedValues:
+      - internet-facing
+      - internal
+    Description: Load balancer scheme.
+
 Resources:
 
   # ============================================================
@@ -53,7 +61,7 @@ Resources:
     Properties:
       Name: !Sub '${EnvironmentName}-alb'
 
-      Scheme: internet-facing
+      Scheme: !Ref Scheme
       Type: application
       IpAddressType: ipv4
 

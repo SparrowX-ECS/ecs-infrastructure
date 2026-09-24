@@ -1,0 +1,78 @@
+name: CFN Plan
+
+on:
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+    paths:
+      - 'cloudformation/**'
+      - 'parameters.yaml'
+      - 'scripts/**'
+      - '.github/workflows/**'
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  AWS_REGION: eu-west-1
+
+jobs:
+  plan:
+    name: Plan CloudFormation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install cfn-lint
+        run: pip install cfn-lint
+
+      - name: Install yq
+        uses: mikefarah/yq@v4.48.2
+
+      - name: Check configured region
+        run: test "$(yq -r '.environment.region' parameters.yaml)" = "$AWS_REGION"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/cloudformation-github-actions
+          aws-region: eu-west-1
+
+      - name: Validate templates
+        run: |
+          cfn-lint cloudformation/*.yaml
+          for template in cloudformation/*.yaml; do
+            aws cloudformation validate-template \
+              --template-body file://"$template"
+          done
+
+      - name: Create and inspect change sets
+        run: |
+          set -o pipefail
+          ./scripts/cfn-plan.sh 2>&1 | tee cfn-plan-output.txt
+
+      - name: Add to summary
+        if: always()
+        run: |
+          {
+            echo '## CloudFormation plan'
+            echo '```text'
+            if [ -f cfn-plan-output.txt ]; then
+              sed -n '1,240p' cfn-plan-output.txt
+            else
+              echo 'The plan did not start; inspect the workflow logs.'
+            fi
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
