@@ -34,6 +34,33 @@ delete_stack() {
   deleted_stacks+=("$stack_name")
 }
 
+wait_for_stack_delete() {
+  local stack_name="$1"
+
+  echo "Waiting for deletion: $stack_name"
+  if ! aws cloudformation wait stack-delete-complete \
+    --region "$REGION" \
+    --stack-name "$stack_name"; then
+    echo "Deletion failed for $stack_name. Recent stack events:" >&2
+    aws cloudformation describe-stack-events \
+      --region "$REGION" \
+      --stack-name "$stack_name" \
+      --query 'StackEvents[?ResourceStatusReason!=null].[LogicalResourceId,ResourceStatus,ResourceStatusReason]' \
+      --output table >&2 || true
+    return 1
+  fi
+}
+
+wait_for_deleted_stacks() {
+  local stack_name
+
+  for stack_name in "$@"; do
+    if [[ " ${deleted_stacks[*]} " == *" $stack_name "* ]]; then
+      wait_for_stack_delete "$stack_name"
+    fi
+  done
+}
+
 service_stacks=(
   web-portal
   reporting-api
@@ -46,17 +73,26 @@ service_stacks=(
 for service in "${service_stacks[@]}"; do
   delete_stack "${ENVIRONMENT_NAME}-${service}"
 done
+wait_for_deleted_stacks \
+  "${ENVIRONMENT_NAME}-web-portal" \
+  "${ENVIRONMENT_NAME}-reporting-api" \
+  "${ENVIRONMENT_NAME}-billing-api" \
+  "${ENVIRONMENT_NAME}-task-api" \
+  "${ENVIRONMENT_NAME}-notification-api" \
+  "${ENVIRONMENT_NAME}-customer-api"
 
 delete_stack "${ENVIRONMENT_NAME}-database"
 delete_stack "${ENVIRONMENT_NAME}-alb"
 delete_stack "${ENVIRONMENT_NAME}-ecs-cluster"
-delete_stack "${ENVIRONMENT_NAME}-ecr"
-delete_stack "${ENVIRONMENT_NAME}-network"
+wait_for_deleted_stacks \
+  "${ENVIRONMENT_NAME}-database" \
+  "${ENVIRONMENT_NAME}-alb" \
+  "${ENVIRONMENT_NAME}-ecs-cluster"
 
-for stack_name in "${deleted_stacks[@]}"; do
-  aws cloudformation wait stack-delete-complete \
-    --region "$REGION" \
-    --stack-name "$stack_name"
-done
+delete_stack "${ENVIRONMENT_NAME}-ecr"
+wait_for_deleted_stacks "${ENVIRONMENT_NAME}-ecr"
+
+delete_stack "${ENVIRONMENT_NAME}-network"
+wait_for_deleted_stacks "${ENVIRONMENT_NAME}-network"
 
 echo "CloudFormation destroy complete."
