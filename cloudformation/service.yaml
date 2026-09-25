@@ -430,8 +430,6 @@ Resources:
           Value: !Ref ServiceName
         - Key: Environment
           Value: !Ref EnvironmentName
-
-
   # ============================================================
   # ALB Listener Rule
   # ============================================================
@@ -456,8 +454,6 @@ Resources:
 
         - Type: forward
           TargetGroupArn: !Ref TargetGroup
-
-
   # ============================================================
   # ECS Fargate Service
   # ============================================================
@@ -517,7 +513,6 @@ Resources:
         - ContainerName: !Ref ServiceName
           ContainerPort: !Ref ContainerPort
           TargetGroupArn: !Ref TargetGroup
-
       Tags:
         - Key: Service
           Value: !Ref ServiceName
@@ -550,8 +545,6 @@ Outputs:
     Value: !Ref TargetGroup
     Export:
       Name: !Sub '${EnvironmentName}-${ServiceName}-TargetGroupArn'
-
-
   ServiceSecurityGroupId:
     Description: ECS service security group ID.
     Value: !Ref ServiceSecurityGroup
