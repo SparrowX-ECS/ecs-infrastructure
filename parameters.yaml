@@ -29,5 +29,5 @@ alb:
 
 cloudfront:
   enabled: true
-  domain_name: 'mo2cloud.com'
+  domain_name: 'sparrowx.mo2cloud.com'
   certificate_parameter: /sparrowx/cloudfront/acm-certificate-arn
