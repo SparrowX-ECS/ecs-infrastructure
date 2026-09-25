@@ -13,6 +13,36 @@ Parameters:
 Resources:
 
   # ============================================================
+  # Shared ECS task security group
+  # ============================================================
+
+  EcsServiceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow private communication between ECS services.
+      VpcId:
+        Fn::ImportValue: !Sub '${EnvironmentName}-VpcId'
+      SecurityGroupEgress:
+        - Description: Allow ECS task egress.
+          IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-ecs-services-sg'
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  EcsServiceSecurityGroupIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref EcsServiceSecurityGroup
+      IpProtocol: tcp
+      FromPort: 8000
+      ToPort: 8000
+      SourceSecurityGroupId: !Ref EcsServiceSecurityGroup
+      Description: Allow Service Connect traffic between ECS tasks.
+
+  # ============================================================
   # ECS Cluster
   # ============================================================
 
@@ -60,3 +90,9 @@ Outputs:
     Value: !GetAtt EcsCluster.Arn
     Export:
       Name: !Sub '${EnvironmentName}-EcsClusterArn'
+
+  EcsServiceSecurityGroupId:
+    Description: Shared security group ID for ECS task-to-task traffic.
+    Value: !Ref EcsServiceSecurityGroup
+    Export:
+      Name: !Sub '${EnvironmentName}-EcsServiceSecurityGroupId'

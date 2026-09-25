@@ -295,6 +295,23 @@ Resources:
         - Key: Environment
           Value: !Ref EnvironmentName
 
+  EcsExecPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub '${ServiceName}-ecs-exec'
+      Roles:
+        - !Ref TaskRole
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - ssmmessages:CreateControlChannel
+              - ssmmessages:CreateDataChannel
+              - ssmmessages:OpenControlChannel
+              - ssmmessages:OpenDataChannel
+            Resource: '*'
+
 
   # ============================================================
   # ECS Task Definition
@@ -468,10 +485,14 @@ Resources:
 
       ServiceName: !Ref ServiceName
 
+      EnableExecuteCommand: true
+
       Cluster:
         Fn::ImportValue: !Sub '${EnvironmentName}-EcsClusterArn'
 
       LaunchType: FARGATE
+
+      PlatformVersion: '1.4.0'
 
       DesiredCount: !Ref DesiredCount
 
@@ -501,6 +522,7 @@ Resources:
 
           SecurityGroups:
             - !Ref ServiceSecurityGroup
+            - Fn::ImportValue: !Sub '${EnvironmentName}-EcsServiceSecurityGroupId'
 
           Subnets:
 
