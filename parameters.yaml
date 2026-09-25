@@ -26,3 +26,8 @@ database:
 
 alb:
   scheme: internet-facing
+
+cloudfront:
+  enabled: true
+  domain_name: 'mo2cloud.com'
+  certificate_parameter: /sparrowx/cloudfront/acm-certificate-arn

@@ -81,6 +81,9 @@ wait_for_deleted_stacks \
   "${ENVIRONMENT_NAME}-notification-api" \
   "${ENVIRONMENT_NAME}-customer-api"
 
+delete_stack "${ENVIRONMENT_NAME}-cloudfront"
+wait_for_deleted_stacks "${ENVIRONMENT_NAME}-cloudfront"
+
 delete_stack "${ENVIRONMENT_NAME}-database"
 delete_stack "${ENVIRONMENT_NAME}-alb"
 delete_stack "${ENVIRONMENT_NAME}-ecs-cluster"

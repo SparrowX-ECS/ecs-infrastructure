@@ -26,6 +26,9 @@ DB_ALLOCATED_STORAGE="$(yq -r '.database.allocated_storage' "$PARAMETERS_FILE")"
 DB_BACKUP_RETENTION="$(yq -r '.database.backup_retention_days' "$PARAMETERS_FILE")"
 DB_MULTI_AZ="$(yq -r '.database.multi_az' "$PARAMETERS_FILE")"
 ALB_SCHEME="$(yq -r '.alb.scheme' "$PARAMETERS_FILE")"
+CLOUDFRONT_ENABLED="$(yq -r '.cloudfront.enabled' "$PARAMETERS_FILE")"
+CLOUDFRONT_DOMAIN_NAME="$(yq -r '.cloudfront.domain_name' "$PARAMETERS_FILE")"
+CLOUDFRONT_CERTIFICATE_PARAMETER="$(yq -r '.cloudfront.certificate_parameter' "$PARAMETERS_FILE")"
 
 deploy_stack() {
   local stack_name="$1"
@@ -79,5 +82,17 @@ deploy_stack \
   DBAllocatedStorage="$DB_ALLOCATED_STORAGE" \
   DBBackupRetentionDays="$DB_BACKUP_RETENTION" \
   DBMultiAZ="$DB_MULTI_AZ"
+
+if [[ "$CLOUDFRONT_ENABLED" == "true" ]]; then
+  [[ -n "$CLOUDFRONT_DOMAIN_NAME" ]] || { echo 'cloudfront.domain_name is required when CloudFront is enabled' >&2; exit 1; }
+  [[ -n "$CLOUDFRONT_CERTIFICATE_PARAMETER" ]] || { echo 'cloudfront.certificate_parameter is required when CloudFront is enabled' >&2; exit 1; }
+
+  deploy_stack \
+    "${ENVIRONMENT_NAME}-cloudfront" \
+    "$CFN_DIR/cloudfront.yaml" \
+    EnvironmentName="$ENVIRONMENT_NAME" \
+    DomainName="$CLOUDFRONT_DOMAIN_NAME" \
+    CloudFrontCertificateArn="$CLOUDFRONT_CERTIFICATE_PARAMETER"
+fi
 
 echo "CloudFormation apply complete."

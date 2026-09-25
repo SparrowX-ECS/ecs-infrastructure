@@ -1,0 +1,88 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Description: CloudFront HTTPS distribution with an HTTP origin on the SparrowX ALB.
+
+Parameters:
+
+  EnvironmentName:
+    Type: String
+    Default: sparrowx
+
+  DomainName:
+    Type: String
+    Default: ''
+    Description: Optional custom hostname, for example app.example.com.
+
+  CloudFrontCertificateArn:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /sparrowx/cloudfront/acm-certificate-arn
+    Description: SSM parameter containing the ACM certificate ARN in us-east-1.
+
+Conditions:
+
+  HasCustomDomain: !Not [!Equals [!Ref DomainName, '']]
+
+Resources:
+
+  Distribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: !Sub '${EnvironmentName} CloudFront distribution'
+        HttpVersion: http2and3
+        IPV6Enabled: true
+        Aliases: !If
+          - HasCustomDomain
+          - - !Ref DomainName
+          - !Ref AWS::NoValue
+        Origins:
+          - Id: AlbHttpOrigin
+            DomainName:
+              Fn::ImportValue: !Sub '${EnvironmentName}-AlbDnsName'
+            CustomOriginConfig:
+              HTTPPort: 80
+              HTTPSPort: 443
+              OriginProtocolPolicy: http-only
+        DefaultCacheBehavior:
+          TargetOriginId: AlbHttpOrigin
+          ViewerProtocolPolicy: redirect-to-https
+          Compress: true
+          AllowedMethods:
+            - DELETE
+            - GET
+            - HEAD
+            - OPTIONS
+            - PATCH
+            - POST
+            - PUT
+          CachedMethods:
+            - GET
+            - HEAD
+          ForwardedValues:
+            QueryString: true
+            Cookies:
+              Forward: all
+          MinTTL: 0
+          DefaultTTL: 0
+          MaxTTL: 0
+        ViewerCertificate: !If
+          - HasCustomDomain
+          - AcmCertificateArn: !Ref CloudFrontCertificateArn
+            SslSupportMethod: sni-only
+            MinimumProtocolVersion: TLSv1.2_2021
+          - CloudFrontDefaultCertificate: true
+
+Outputs:
+
+  DistributionId:
+    Description: CloudFront distribution ID.
+    Value: !Ref Distribution
+    Export:
+      Name: !Sub '${EnvironmentName}-CloudFrontDistributionId'
+
+  DistributionDomainName:
+    Description: CloudFront hostname for the manual DNS record.
+    Value: !GetAtt Distribution.DomainName
+    Export:
+      Name: !Sub '${EnvironmentName}-CloudFrontDomainName'
