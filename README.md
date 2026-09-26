@@ -38,6 +38,14 @@ The stack dependency order is:
 
 CloudFormation exports connect these stacks without hard-coding resource IDs. ECS tasks run without public IP addresses in private subnets. The ALB is the public entry point, and path-based rules route requests such as `/api/customer/*` and `/api/reporting/*` to the appropriate service.
 
+## Note to Readers
+
+The platform is served through the custom domain [https://sparrowx.mo2cloud.com](https://sparrowx.mo2cloud.com). The CloudFormation environment may be taken down after the project demonstration to avoid incurring ongoing AWS resource costs, so the website may not be live when you try to access it.
+
+Because the platform is defined as infrastructure as code, the complete environment can be recreated from these CloudFormation templates and brought live again within minutes when needed. 
+
+If you are interested in working with me on future projects and would like to see the platform running, feel free to reach out anytime, I would be happy to demo it live.
+
 ## Service deployment flow
 
 Each application repository contains an `ecs-parameters.yaml` file describing its service stack, ECR repository, container settings, ALB path, health check, and database requirements. For example, [`customer-api/ecs-parameters.yaml`](https://github.com/SparrowX-ECS/customer-api/blob/main/ecs-parameters.yaml) points to the shared `sparrowx-database` stack and the `customerdb` database.
