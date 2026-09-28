@@ -1,0 +1,328 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Description: >
+  SparrowX public networking for ECS.
+  Creates a VPC, Internet Gateway, and three public subnets
+  across three Availability Zones.
+
+Parameters:
+
+  EnvironmentName:
+    Type: String
+    Default: sparrowx
+    Description: Environment name used for resource naming and tagging.
+
+  ProjectName:
+    Type: String
+    Description: Project name used for resource naming.
+    Default: sparrowx
+
+  VpcCidr:
+    Type: String
+    Description: CIDR block for the VPC.
+
+  AvailabilityZoneA:
+    Type: AWS::EC2::AvailabilityZone::Name
+    Description: First Availability Zone.
+
+  AvailabilityZoneB:
+    Type: AWS::EC2::AvailabilityZone::Name
+    Description: Second Availability Zone.
+
+  AvailabilityZoneC:
+    Type: AWS::EC2::AvailabilityZone::Name
+    Description: Third Availability Zone.
+
+  PublicSubnetACidr:
+    Type: String
+    Description: CIDR block for the first public subnet.
+
+  PublicSubnetBCidr:
+    Type: String
+    Description: CIDR block for the second public subnet.
+
+  PublicSubnetCCidr:
+    Type: String
+    Description: CIDR block for the third public subnet.
+
+Resources:
+
+  # ============================================================
+  # VPC
+  # ============================================================
+
+  VPC:
+    Type: AWS::EC2::VPC
+
+    Properties:
+      CidrBlock: !Ref VpcCidr
+
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${EnvironmentName}-vpc'
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+
+  # ============================================================
+  # Internet Gateway
+  # ============================================================
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${EnvironmentName}-igw'
+
+
+  InternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+
+  # ============================================================
+  # Public Subnets
+  # ============================================================
+
+  PublicSubnetA:
+    Type: AWS::EC2::Subnet
+
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Ref AvailabilityZoneA
+      CidrBlock: !Ref PublicSubnetACidr
+
+      MapPublicIpOnLaunch: true
+
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${EnvironmentName}-public-a'
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+
+  PublicSubnetB:
+    Type: AWS::EC2::Subnet
+
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Ref AvailabilityZoneB
+      CidrBlock: !Ref PublicSubnetBCidr
+
+      MapPublicIpOnLaunch: true
+
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${EnvironmentName}-public-b'
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref EnvironmentName
+  
+
+  PublicSubnetC:
+    Type: AWS::EC2::Subnet
+
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Ref AvailabilityZoneC
+      CidrBlock: !Ref PublicSubnetCCidr
+
+      MapPublicIpOnLaunch: true
+
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${EnvironmentName}-public-c'
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+
+
+  # ============================================================
+  # Public Route Tables
+  # ============================================================
+
+  PublicRouteTableA:
+    Type: AWS::EC2::RouteTable
+
+    Properties:
+      VpcId: !Ref VPC
+
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${EnvironmentName}-public-rt-a'
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+
+  PublicRouteTableB:
+    Type: AWS::EC2::RouteTable
+
+    Properties:
+      VpcId: !Ref VPC
+
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${EnvironmentName}-public-rt-b'
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+
+  PublicRouteTableC:
+    Type: AWS::EC2::RouteTable
+
+    Properties:
+      VpcId: !Ref VPC
+
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${EnvironmentName}-public-rt-c'
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+
+  # ============================================================
+  # Public Routes
+  # ============================================================
+
+  PublicRouteA:
+    Type: AWS::EC2::Route
+
+    DependsOn: InternetGatewayAttachment
+
+    Properties:
+      RouteTableId: !Ref PublicRouteTableA
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+
+  PublicRouteB:
+    Type: AWS::EC2::Route
+
+    DependsOn: InternetGatewayAttachment
+
+    Properties:
+      RouteTableId: !Ref PublicRouteTableB
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+
+  PublicRouteC:
+    Type: AWS::EC2::Route
+
+    DependsOn: InternetGatewayAttachment
+
+    Properties:
+      RouteTableId: !Ref PublicRouteTableC
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  # ============================================================
+  # Public Subnet Associations
+  # ============================================================
+
+  PublicSubnetARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+
+    Properties:
+      RouteTableId: !Ref PublicRouteTableA
+      SubnetId: !Ref PublicSubnetA
+
+
+  PublicSubnetBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+
+    Properties:
+      RouteTableId: !Ref PublicRouteTableB
+      SubnetId: !Ref PublicSubnetB
+
+
+  PublicSubnetCRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+
+    Properties:
+      RouteTableId: !Ref PublicRouteTableC
+      SubnetId: !Ref PublicSubnetC
+
+# ==============================================================
+# Outputs
+# ==============================================================
+
+Outputs:
+
+  # ============================================================
+  # VPC
+  # ============================================================
+  VpcId:
+    Description: VPC ID
+    Value: !Ref VPC
+
+    Export:
+      Name: !Sub '${ProjectName}-${EnvironmentName}-VpcId'
+
+
+  VpcCidr:
+    Description: VPC CIDR block
+    Value: !Ref VpcCidr
+
+    Export:
+      Name: !Sub '${ProjectName}-${EnvironmentName}-VpcCidr'
+
+  # ============================================================
+  # Public Subnets
+  # ============================================================
+
+  PublicSubnetA:
+    Description: Public subnet in Availability Zone A
+    Value: !Ref PublicSubnetA
+
+    Export:
+      Name: !Sub '${ProjectName}-${EnvironmentName}-PublicSubnetA'
+
+
+  PublicSubnetB:
+    Description: Public subnet in Availability Zone B
+    Value: !Ref PublicSubnetB
+
+    Export:
+      Name: !Sub '${ProjectName}-${EnvironmentName}-PublicSubnetB'
+
+
+  PublicSubnetC:
+    Description: Public subnet in Availability Zone C
+    Value: !Ref PublicSubnetC
+
+    Export:
+      Name: !Sub '${ProjectName}-${EnvironmentName}-PublicSubnetC'
+
+
+  PublicSubnets:
+    Description: Comma-separated list of public subnet IDs
+    Value: !Join
+      - ','
+      - - !Ref PublicSubnetA
+        - !Ref PublicSubnetB
+        - !Ref PublicSubnetC
+
+    Export:
+      Name: !Sub '${ProjectName}-${EnvironmentName}-PublicSubnets'

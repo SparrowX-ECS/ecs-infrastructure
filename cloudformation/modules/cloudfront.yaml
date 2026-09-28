@@ -6,6 +6,14 @@ Parameters:
 
   EnvironmentName:
     Type: String
+    Description: Deployment environment. Must be either dev or prod.
+    AllowedValues:
+      - dev
+      - prod
+
+  ProjectName:
+    Type: String
+    Description: Project name used for resource naming.
     Default: sparrowx
 
   DomainName:
@@ -24,12 +32,16 @@ Conditions:
 
 Resources:
 
+# ==============================================================
+# Cloudfront Distribution
+# ==============================================================
+
   Distribution:
     Type: AWS::CloudFront::Distribution
     Properties:
       DistributionConfig:
         Enabled: true
-        Comment: !Sub '${EnvironmentName} CloudFront distribution'
+        Comment: !Sub '${ProjectName} ${EnvironmentName} CloudFront distribution'
         HttpVersion: http2and3
         IPV6Enabled: true
         Aliases: !If
@@ -39,7 +51,7 @@ Resources:
         Origins:
           - Id: AlbHttpOrigin
             DomainName:
-              Fn::ImportValue: !Sub '${EnvironmentName}-AlbDnsName'
+              Fn::ImportValue: !Sub '${ProjectName}-${EnvironmentName}-AlbDnsName'
             CustomOriginConfig:
               HTTPPort: 80
               HTTPSPort: 443
@@ -73,16 +85,28 @@ Resources:
             MinimumProtocolVersion: TLSv1.2_2021
           - CloudFrontDefaultCertificate: true
 
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${EnvironmentName}-cloudfront-distribution'
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: Project
+          Value: !Ref ProjectName
+
+# ==============================================================
+# Outputs
+# ==============================================================
+
 Outputs:
 
   DistributionId:
     Description: CloudFront distribution ID.
     Value: !Ref Distribution
     Export:
-      Name: !Sub '${EnvironmentName}-CloudFrontDistributionId'
+      Name: !Sub '${ProjectName}-${EnvironmentName}-CloudFrontDistributionId'
 
   DistributionDomainName:
     Description: CloudFront hostname for the manual DNS record.
     Value: !GetAtt Distribution.DomainName
     Export:
-      Name: !Sub '${EnvironmentName}-CloudFrontDomainName'
+      Name: !Sub '${ProjectName}-${EnvironmentName}-CloudFrontDomainName'

@@ -1,0 +1,47 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Transform:
+  - AWS::LanguageExtensions
+
+Description: >
+  Reusable ECR repository stack for SparrowX ECS services.
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Description: Deployment environment. Must be either dev or prod.
+    AllowedValues:
+      - dev
+      - prod
+
+  ProjectName:
+    Type: String
+    Description: Project name used for resource naming.
+    Default: sparrowx
+
+  Services:
+    Type: CommaDelimitedList
+    Description: >
+      Comma-separated list of service names for which ECR repositories
+      should be created.
+
+Resources:
+
+  'Fn::ForEach::EcrRepositories':
+    - ServiceName
+    - !Ref Services
+    - '${ServiceName}Repository':
+        Type: AWS::ECR::Repository
+        Properties:
+          RepositoryName: !Sub '${ProjectName}-${EnvironmentName}-${ServiceName}'
+          ImageScanningConfiguration:
+            ScanOnPush: true
+          ImageTagMutability: IMMUTABLE
+          EmptyOnDelete: true
+          Tags:
+            - Key: Environment
+              Value: !Ref EnvironmentName
+            - Key: Project
+              Value: !Ref ProjectName
+            - Key: Service
+              Value: !Ref ServiceName

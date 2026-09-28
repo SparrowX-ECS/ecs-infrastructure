@@ -3,6 +3,9 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: >
   Reusable ECS Fargate service template for SparrowX applications.
 
+Transform:
+  - AWS::LanguageExtensions
+
 Metadata:
   cfn-lint:
     config:
@@ -17,11 +20,24 @@ Parameters:
 
   EnvironmentName:
     Type: String
+    Description: Deployment environment. Must be either dev or prod.
+    AllowedValues:
+      - dev
+      - prod
+
+  ProjectName:
+    Type: String
+    Description: Project name used for resource naming.
     Default: sparrowx
 
   ServiceName:
     Type: String
     Description: Name of the application service.
+
+  FrontendServiceName:
+    Type: String
+    Description: Name of the frontend service. Used for creating fallback rule to handle errors.
+    Default: web-portal
 
   ImageTag:
     Type: String
@@ -33,24 +49,23 @@ Parameters:
     Default: 8000
     Description: Port exposed by the application container.
 
-  Cpu:
+  Size:
     Type: String
-    Default: '256'
+    Default: small
+    Description: Fargate task size. Must be one of micro, small, medium, large, or x-large.
     AllowedValues:
-      - '256'
-      - '512'
-      - '1024'
-      - '2048'
-      - '4096'
-
-  Memory:
-    Type: String
-    Default: '512'
+      - micro
+      - small
+      - medium
+      - large
+      - x-large
 
   DesiredCount:
     Type: Number
+    Description: Desired number of ECS tasks.
     Default: 1
     MinValue: 1
+    MaxValue: 10
 
   # ============================================================
   # ALB
@@ -102,6 +117,10 @@ Parameters:
     Default: ''
     Description: Database name for services with a database.
 
+  # ============================================================
+  # API URLs
+  # ============================================================
+
   CustomerApiUrl:
     Type: String
     Default: ''
@@ -122,17 +141,42 @@ Parameters:
     Default: '*'
     Description: Comma-separated browser origins allowed by the API.
 
+
+  # ============================================================
+  # Mappings
+  # ============================================================
+
+Mappings:
+
+  FargateSizes:
+
+    micro:
+      Cpu: '256'
+      Memory: '512'
+
+    small:
+      Cpu: '512'
+      Memory: '1024'
+
+    medium:
+      Cpu: '1024'
+      Memory: '2048'
+
+    large:
+      Cpu: '2048'
+      Memory: '4096'
+
+    x-large:
+      Cpu: '4096'
+      Memory: '8192'
+
 Conditions:
 
-  HasDatabase:
-    !Not
-      - !Equals
-        - !Ref DatabaseSecretArn
-        - ''
-
+  HasDatabase: !Not [!Equals [!Ref DatabaseSecretArn, '']]
   HasCustomerApiUrl: !Not [!Equals [!Ref CustomerApiUrl, '']]
   HasTaskApiUrl: !Not [!Equals [!Ref TaskApiUrl, '']]
   HasBillingApiUrl: !Not [!Equals [!Ref BillingApiUrl, '']]
+  IsFrontendService: !Equals [!Ref ServiceName, !Ref FrontendServiceName]
 
 # ==============================================================
 # Resources
@@ -147,9 +191,9 @@ Resources:
   ServiceSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: !Sub 'Security group for ${ServiceName} ECS tasks.'
+      GroupDescription: !Sub 'Security group for ${ProjectName}-${EnvironmentName} ${ServiceName} ECS tasks.'
       VpcId:
-        Fn::ImportValue: !Sub '${EnvironmentName}-VpcId'
+        Fn::ImportValue: !Sub '${ProjectName}-${EnvironmentName}-VpcId'
 
       SecurityGroupIngress:
 
@@ -158,7 +202,7 @@ Resources:
           FromPort: !Ref ContainerPort
           ToPort: !Ref ContainerPort
           SourceSecurityGroupId:
-            Fn::ImportValue: !Sub '${EnvironmentName}-AlbSecurityGroupId'
+            Fn::ImportValue: !Sub '${ProjectName}-${EnvironmentName}-AlbSecurityGroupId'
 
       SecurityGroupEgress:
 
@@ -168,22 +212,13 @@ Resources:
 
       Tags:
         - Key: Name
-          Value: !Sub '${EnvironmentName}-${ServiceName}-sg'
+          Value: !Sub '${ProjectName}-${EnvironmentName}-${ServiceName}-sg'
         - Key: Service
           Value: !Ref ServiceName
         - Key: Environment
           Value: !Ref EnvironmentName
-
-  ServiceToServiceIngress:
-    Type: AWS::EC2::SecurityGroupIngress
-    Properties:
-      GroupId: !Ref ServiceSecurityGroup
-      IpProtocol: tcp
-      FromPort: !Ref ContainerPort
-      ToPort: !Ref ContainerPort
-      SourceSecurityGroupId: !Ref ServiceSecurityGroup
-      Description: Allow traffic from other ECS services through Service Connect.
-
+        - Key: Project
+          Value: !Ref ProjectName
 
   # ============================================================
   # Allow ECS service to access its own database
@@ -206,15 +241,19 @@ Resources:
 
   LogGroup:
     Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
     Properties:
-      LogGroupName: !Sub '/ecs/${EnvironmentName}/${ServiceName}'
-      RetentionInDays: 7
+      LogGroupName: !Sub '/ecs/${ProjectName}/${EnvironmentName}/${ServiceName}'
+      RetentionInDays: 3
 
       Tags:
         - Key: Service
           Value: !Ref ServiceName
         - Key: Environment
           Value: !Ref EnvironmentName
+        - Key: Project
+          Value: !Ref ProjectName
 
 
   # ============================================================
@@ -224,7 +263,7 @@ Resources:
   TaskExecutionRole:
     Type: AWS::IAM::Role
     Properties:
-      Description: !Sub 'ECS execution role for ${ServiceName}.'
+      Description: !Sub 'ECS execution role for ${ProjectName}-${EnvironmentName} ${ServiceName}.'
 
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
@@ -244,7 +283,8 @@ Resources:
           Value: !Ref ServiceName
         - Key: Environment
           Value: !Ref EnvironmentName
-
+        - Key: Project
+          Value: !Ref ProjectName
 
   # ============================================================
   # Allow ECS execution role to read database secret
@@ -254,7 +294,7 @@ Resources:
     Type: AWS::IAM::Policy
     Condition: HasDatabase
     Properties:
-      PolicyName: !Sub '${ServiceName}-database-secret-access'
+      PolicyName: !Sub '${ProjectName}-${EnvironmentName}-${ServiceName}-database-secret-access'
 
       Roles:
         - !Ref TaskExecutionRole
@@ -277,7 +317,7 @@ Resources:
   TaskRole:
     Type: AWS::IAM::Role
     Properties:
-      Description: !Sub 'Application task role for ${ServiceName}.'
+      Description: !Sub 'Application task role for ${ProjectName}-${EnvironmentName} ${ServiceName}.'
 
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
@@ -294,11 +334,16 @@ Resources:
           Value: !Ref ServiceName
         - Key: Environment
           Value: !Ref EnvironmentName
+        - Key: Project
+          Value: !Ref ProjectName
 
+  # ============================================================
+  # ECS Task Role Policies
+  # ============================================================
   EcsExecPolicy:
     Type: AWS::IAM::Policy
     Properties:
-      PolicyName: !Sub '${ServiceName}-ecs-exec'
+      PolicyName: !Sub '${ProjectName}-${EnvironmentName} ${ServiceName}-ecs-exec'
       Roles:
         - !Ref TaskRole
       PolicyDocument:
@@ -321,15 +366,22 @@ Resources:
     Type: AWS::ECS::TaskDefinition
     Properties:
 
-      Family: !Sub '${EnvironmentName}-${ServiceName}'
+      Family: !Sub '${ProjectName}-${EnvironmentName}-${ServiceName}'
 
       NetworkMode: awsvpc
 
       RequiresCompatibilities:
         - FARGATE
 
-      Cpu: !Ref Cpu
-      Memory: !Ref Memory
+      Cpu: !FindInMap
+        - FargateSizes
+        - !Ref Size
+        - Cpu
+
+      Memory: !FindInMap
+        - FargateSizes
+        - !Ref Size
+        - Memory
 
       ExecutionRoleArn: !GetAtt TaskExecutionRole.Arn
       TaskRoleArn: !GetAtt TaskRole.Arn
@@ -420,10 +472,10 @@ Resources:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
 
-      Name: !Sub '${EnvironmentName}-${ServiceName}'
+      Name: !Sub '${ProjectName}-${EnvironmentName}-${ServiceName}'
 
       VpcId:
-        Fn::ImportValue: !Sub '${EnvironmentName}-VpcId'
+        Fn::ImportValue: !Sub '${ProjectName}-${EnvironmentName}-VpcId'
 
       TargetType: ip
 
@@ -447,6 +499,9 @@ Resources:
           Value: !Ref ServiceName
         - Key: Environment
           Value: !Ref EnvironmentName
+        - Key: Project
+          Value: !Ref ProjectName
+
   # ============================================================
   # ALB Listener Rule
   # ============================================================
@@ -456,7 +511,7 @@ Resources:
     Properties:
 
       ListenerArn:
-        Fn::ImportValue: !Sub '${EnvironmentName}-AlbHttpListenerArn'
+        Fn::ImportValue: !Sub '${ProjectName}-${EnvironmentName}-AlbHttpListenerArn'
 
       Priority: !Ref ListenerRulePriority
 
@@ -471,6 +526,50 @@ Resources:
 
         - Type: forward
           TargetGroupArn: !Ref TargetGroup
+
+  # ============================================================
+  # ALB FallbackListener Rules
+  # ============================================================
+
+  # Handle API routes with a 404 response if no matching route is found.
+  ApiFallbackRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn:
+        Fn::ImportValue: !Sub '${ProjectName}-${EnvironmentName}-AlbHttpListenerArn'
+
+      Priority: 2200
+      Conditions:
+        - Field: path-pattern
+          PathPatternConfig:
+            Values:
+              - /api/*
+      Actions:
+        - Type: fixed-response
+          FixedResponseConfig:
+            StatusCode: '404'
+            ContentType: application/json
+            MessageBody: '{"detail":"API route not found"}'
+
+  # Handle frontend routes with a 404 response if no matching route is found.
+  FrontendRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Condition: IsFrontendService
+    Properties:
+      ListenerArn:
+        Fn::ImportValue: !Sub '${ProjectName}-${EnvironmentName}-AlbHttpListenerArn'
+
+      Priority: 2300
+      Conditions:
+        - Field: path-pattern
+          PathPatternConfig:
+            Values:
+              - /*
+      Actions:
+        - Type: forward
+          TargetGroupArn: 
+            Fn::ImportValue: !Ref TargetGroup
+
   # ============================================================
   # ECS Fargate Service
   # ============================================================
@@ -488,7 +587,7 @@ Resources:
       EnableExecuteCommand: true
 
       Cluster:
-        Fn::ImportValue: !Sub '${EnvironmentName}-EcsClusterArn'
+        Fn::ImportValue: !Sub '${ProjectName}-${EnvironmentName}-EcsClusterArn'
 
       LaunchType: FARGATE
 
@@ -522,24 +621,29 @@ Resources:
 
           SecurityGroups:
             - !Ref ServiceSecurityGroup
-            - Fn::ImportValue: !Sub '${EnvironmentName}-EcsServiceSecurityGroupId'
+            - Fn::ImportValue: !Sub '${ProjectName}-${EnvironmentName}-EcsServiceSecurityGroupId'
 
           Subnets:
 
-            - Fn::ImportValue: !Sub '${EnvironmentName}-PrivateSubnetA'
+            - Fn::ImportValue: !Sub '${ProjectName}-${EnvironmentName}-PrivateSubnetA'
 
-            - Fn::ImportValue: !Sub '${EnvironmentName}-PrivateSubnetB'
+            - Fn::ImportValue: !Sub '${ProjectName}-${EnvironmentName}-PrivateSubnetB'
+
+            - Fn::ImportValue: !Sub '${ProjectName}-${EnvironmentName}-PrivateSubnetC'
 
       LoadBalancers:
 
         - ContainerName: !Ref ServiceName
           ContainerPort: !Ref ContainerPort
           TargetGroupArn: !Ref TargetGroup
+          
       Tags:
         - Key: Service
           Value: !Ref ServiceName
         - Key: Environment
           Value: !Ref EnvironmentName
+        - Key: Project
+          Value: !Ref ProjectName
 
 
 # ==============================================================
@@ -552,30 +656,32 @@ Outputs:
     Description: ECS service name.
     Value: !Ref EcsService
     Export:
-      Name: !Sub '${EnvironmentName}-${ServiceName}-EcsServiceName'
+      Name: !Sub '${ProjectName}-${EnvironmentName}-${ServiceName}-EcsServiceName'
 
 
   TaskDefinitionArn:
     Description: ECS task definition ARN.
     Value: !Ref TaskDefinition
     Export:
-      Name: !Sub '${EnvironmentName}-${ServiceName}-TaskDefinitionArn'
+      Name: !Sub '${ProjectName}-${EnvironmentName}-${ServiceName}-TaskDefinitionArn'
 
 
   TargetGroupArn:
     Description: ALB target group ARN.
     Value: !Ref TargetGroup
     Export:
-      Name: !Sub '${EnvironmentName}-${ServiceName}-TargetGroupArn'
+      Name: !Sub '${ProjectName}-${EnvironmentName}-${ServiceName}-TargetGroupArn'
+
+
   ServiceSecurityGroupId:
     Description: ECS service security group ID.
     Value: !Ref ServiceSecurityGroup
     Export:
-      Name: !Sub '${EnvironmentName}-${ServiceName}-SecurityGroupId'
+      Name: !Sub '${ProjectName}-${EnvironmentName}-${ServiceName}-SecurityGroupId'
 
 
   LogGroupName:
     Description: CloudWatch log group name.
     Value: !Ref LogGroup
     Export:
-      Name: !Sub '${EnvironmentName}-${ServiceName}-LogGroupName'
+      Name: !Sub '${ProjectName}-${EnvironmentName}-${ServiceName}-LogGroupName'
