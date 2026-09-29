@@ -64,7 +64,7 @@ NAT_GW_C=$(yq -r '.Network.NatGateways.C' "$PARAMETERS_FILE")
 
 ALB_SCHEME=$(yq -r '.LoadBalancer.Scheme' "$PARAMETERS_FILE")
 
-SERVICES=$(yq -r '.ECR.Repositories | join(",")' "$PARAMETERS_FILE")
+REPOSITORIES=$(yq -r '.ECR.Repositories | join(",")' "$PARAMETERS_FILE")
 
 POSTGRES_DATABASES=$(yq -r '.PostgreSQL.Databases | join(",")' "$PARAMETERS_FILE")
 POSTGRES_MULTIAZ=$(yq -r '.PostgreSQL.MultiAZ' "$PARAMETERS_FILE")
@@ -72,9 +72,16 @@ POSTGRES_INSTANCE_CLASS=$(yq -r '.PostgreSQL.InstanceClass' "$PARAMETERS_FILE")
 POSTGRES_STORAGE=$(yq -r '.PostgreSQL.AllocatedStorage' "$PARAMETERS_FILE")
 POSTGRES_ENGINE_VERSION=$(yq -r '.PostgreSQL.EngineVersion' "$PARAMETERS_FILE")
 
-CLOUDFRONT_MODE=$(yq -r '.CloudFront.Mode' "$PARAMETERS_FILE")
 CLOUDFRONT_CERTIFICATE_ARN=$(yq -r '.CloudFront.CertificateArn' "$PARAMETERS_FILE")
 DOMAIN_NAME=$(yq -r '.CloudFront.DomainName' "$PARAMETERS_FILE")
+
+# Feature Toggle Variables
+NETWORK_MODE=$(yq -r '.Network.Mode' "$PARAMETERS_FILE")
+ECR_MODE=$(yq -r '.ECR.Mode' "$PARAMETERS_FILE")
+ECS_MODE=$(yq -r '.ECS.Mode' "$PARAMETERS_FILE")
+LOADBALANCER_MODE=$(yq -r '.LoadBalancer.Mode' "$PARAMETERS_FILE")
+POSTGRESQL_MODE=$(yq -r '.PostgreSQL.Mode' "$PARAMETERS_FILE")
+CLOUDFRONT_MODE=$(yq -r '.CloudFront.Mode' "$PARAMETERS_FILE")
 
 
 # ============================================================
@@ -137,7 +144,7 @@ cat > "$TMP_JSON_PARAMETERS_FILE" <<EOF
   },
   {
     "ParameterKey": "ECRRepositories",
-    "ParameterValue": "$SERVICES"
+    "ParameterValue": "$REPOSITORIES"
   },
   {
     "ParameterKey": "PostgresDataBases",
@@ -160,16 +167,36 @@ cat > "$TMP_JSON_PARAMETERS_FILE" <<EOF
     "ParameterValue": "$POSTGRES_ENGINE_VERSION"
   },
   {
-    "ParameterKey": "CloudFrontMode",
-    "ParameterValue": "$CLOUDFRONT_MODE"
-  },
-  {
     "ParameterKey": "CloudFrontCertificateArn",
     "ParameterValue": "$CLOUDFRONT_CERTIFICATE_ARN"
   },
   {
     "ParameterKey": "DomainName",
     "ParameterValue": "$DOMAIN_NAME"
+  },
+  {
+    "ParameterKey": "VPCMode",
+    "ParameterValue": "$NETWORK_MODE"
+  },
+  {
+    "ParameterKey": "ECRMode",
+    "ParameterValue": "$ECR_MODE"
+  },
+  {
+    "ParameterKey": "ECSClusterMode",
+    "ParameterValue": "$ECS_MODE"
+  },
+  {
+    "ParameterKey": "LoadBalancerMode",
+    "ParameterValue": "$LOADBALANCER_MODE"
+  },
+  {
+    "ParameterKey": "PostgreDBMode",
+    "ParameterValue": "$POSTGRESQL_MODE"
+  },
+  {
+    "ParameterKey": "CloudFrontMode",
+    "ParameterValue": "$CLOUDFRONT_MODE"
   }
 ]
 EOF

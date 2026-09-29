@@ -21,6 +21,14 @@ Parameters:
   # ============================================================
   # Network Parameters
   # ============================================================
+  VPCMode:
+    Type: String
+    Default: disabled
+    AllowedValues:
+      - enabled
+      - disabled
+    Description: Enable or disable VPC.
+
   VpcCidr:
     Type: String
     Description: CIDR block for the VPC.
@@ -76,69 +84,139 @@ Parameters:
   # ============================================================
   # Load Balancer Parameters
   # ============================================================
-  # Scheme:
-  #   Type: String
-  #   Description: Load balancer scheme.
-  #   Default: internet-facing
+  LoadBalancerMode:
+    Type: String
+    Default: disabled
+    AllowedValues:
+      - enabled
+      - disabled
+    Description: Enable or disable App Load Balancer.
+
+  Scheme:
+    Type: String
+    Description: Load balancer scheme.
+    Default: internet-facing
+
+  # ============================================================
+  # ECS Cluster Parameters
+  # ============================================================
+  ECSClusterMode:
+    Type: String
+    Default: disabled
+    AllowedValues:
+      - enabled
+      - disabled
+    Description: Enable or disable ECS cluster.
+
 
   # ============================================================
   # ECR Parameters
   # ============================================================
-  # ECRRepositories:
-  #   Type: CommaDelimitedList
-  #   Description: >
-  #     Comma-separated list of for ECR repositories to be created. Use lowercase letters and numbers only.
+  ECRMode:
+    Type: String
+    Default: disabled
+    AllowedValues:
+      - enabled
+      - disabled
+    Description: Enable or disable ECR repositories.
+
+  ECRRepositories:
+    Type: CommaDelimitedList
+    Description: >
+      Comma-separated list of for ECR repositories to be created. Use lowercase letters and numbers only.
 
   # ============================================================
   # RDS Postgres DBs Parameters
   # ============================================================
-  # PostgresDBMultiAZ:
-  #   Type: String
-  #   Default: 'false'
-  #   Description: Whether to deploy each database in multiple Availability Zones.
+  PostgresDBMode:
+    Type: String
+    Default: disabled
+    AllowedValues:
+      - enabled
+      - disabled
+    Description: Enable or disable Postgres DBs.
+  
+  PostgresDBMultiAZ:
+    Type: String
+    Default: 'false'
+    Description: Whether to deploy each database in multiple Availability Zones.
 
-  # PostgresDataBases:
-  #   Type: CommaDelimitedList
-  #   Description: >
-  #     Comma-separated list of Postgres database names to be created. Only lowercase letters and numbers are allowed. Naming convention example: customerdb, taskdb  
+  PostgresDataBases:
+    Type: CommaDelimitedList
+    Description: >
+      Comma-separated list of Postgres database names to be created. Only lowercase letters and numbers are allowed. Naming convention example: customerdb, taskdb  
 
-  # PostgresDBInstancesClass:
-  #   Type: String
-  #   Default: db.t4g.micro
-  #   Description: Smallest practical PostgreSQL RDS instance class for this project.
+  PostgresDBInstancesClass:
+    Type: String
+    Default: db.t4g.micro
+    Description: Smallest practical PostgreSQL RDS instance class for this project.
 
-  # PostgresDBAllocatedStorage:
-  #   Type: Number
-  #   Default: 20
-  #   Description: Allocated storage in GiB.
+  PostgresDBAllocatedStorage:
+    Type: Number
+    Default: 20
+    Description: Allocated storage in GiB.
 
-  # PostgresDBEngineVersion:
-  #   Type: String
-  #   Default: '16'
-  #   Description: PostgreSQL major engine version.
+  PostgresDBEngineVersion:
+    Type: String
+    Default: '16'
+    Description: PostgreSQL major engine version.
 
   # ============================================================
   # CloudFront Parameters
   # ============================================================
-#   DomainName:
-#     Type: String
-#     Default: ''
-#     Description: Optional custom hostname, for example app.example.com.
+  CloudFrontMode:
+    Type: String
+    Default: disabled
+    AllowedValues:
+      - enabled
+      - disabled
+    Description: Enable or disable the CloudFront distribution for this environment.
+  
+  DomainName:
+    Type: String
+    Default: ''
+    Description: Optional custom hostname, for example app.example.com.
 
-#   CloudFrontCertificateArn:
-#     Type: String
-#     Description: Path for SSM parameter containing the ACM certificate ARN in us-east-1.
+  CloudFrontCertificateArn:
+    Type: String
+    Description: Path for SSM parameter containing the ACM certificate ARN in us-east-1.
 
-#   CloudFrontMode:
-#     Type: String
-#     Default: disabled
-#     AllowedValues:
-#       - enabled
-#       - disabled
-#     Description: Enable or disable the CloudFront distribution for this environment.
+Conditions:
+  VPCEnabled: !Equals [!Ref VPCMode, enabled]
+  LoadBalancerEnabled: !Equals [!Ref LoadBalancerMode, enabled]
+  ECREnabled: !Equals [!Ref ECRMode, enabled]
+  ECSClusterEnabled: !Equals [!Ref ECSClusterMode, enabled]
+  PostgresDBEnabled: !Equals [!Ref PostgresDBMode, enabled]
+  CloudFrontEnabled: !Equals [!Ref CloudFrontMode, enabled]
 
-# Conditions:
-#   CloudFrontEnabled: !Equals [!Ref CloudFrontMode, enabled]
+# Effective conditions
+
+  LoadBalancerEnabledEffective:
+    Fn::And:
+      - Condition: VPCEnabled
+      - Condition: LoadBalancerEnabled
+
+  ECSClusterEnabledEffective:
+    Fn::And:
+      - Condition: VPCEnabled
+      - Condition: ECSClusterEnabled
+
+  ECREnabledEffective:
+    Fn::And:
+      - Condition: VPCEnabled
+      - Condition: ECREnabled
+
+  PostgresDBEnabledEffective:
+    Fn::And:
+      - Condition: VPCEnabled
+      - Condition: PostgresDBEnabled
+
+  CloudFrontEnabledEffective:
+    Fn::And:
+      - Condition: VPCEnabled
+      - Condition: LoadBalancerEnabled
+      - Condition: CloudFrontEnabled
+
 
 Resources:
 
@@ -147,7 +225,7 @@ Resources:
   # ============================================================
   PublicNetwork:
     Type: AWS::CloudFormation::Stack
-
+    Condition: VPCEnabled
     Properties:
       TemplateURL: ../../cloudformation/modules/public-network.yaml
 
@@ -164,6 +242,7 @@ Resources:
   # ============================================================
   PrivateNetwork:
     Type: AWS::CloudFormation::Stack
+    Condition: VPCEnabled
     DependsOn:
       - PublicNetwork
     Properties:
@@ -182,79 +261,83 @@ Resources:
   # ============================================================
   # ECS Cluster Nested Stack
   # ============================================================
-  # ECSCluster:
-  #   Type: AWS::CloudFormation::Stack
-  #   DependsOn:
-  #     - PublicNetwork
-  #   Properties:
-  #     TemplateURL: ../../cloudformation/modules/ecs-cluster.yaml
+  ECSCluster:
+    Type: AWS::CloudFormation::Stack
+    Condition: ECSClusterEnabledEffective
+    DependsOn:
+      - PublicNetwork
+    Properties:
+      TemplateURL: ../../cloudformation/modules/ecs-cluster.yaml
 
-  #     Parameters:
-  #       ProjectName: !Ref ProjectName
-  #       EnvironmentName: !Ref EnvironmentName
+      Parameters:
+        ProjectName: !Ref ProjectName
+        EnvironmentName: !Ref EnvironmentName
 
   # ============================================================
   # Application Load Balancer Nested Stack
   # ============================================================
-  # ApplicationLoadBalancer:
-  #   Type: AWS::CloudFormation::Stack
-  #   DependsOn:
-  #     - PublicNetwork
-  #   Properties:
-  #     TemplateURL: ../../cloudformation/modules/alb.yaml
+  ApplicationLoadBalancer:
+    Type: AWS::CloudFormation::Stack
+    Condition: LoadBalancerEnabledEffective
+    DependsOn:
+      - PublicNetwork
+    Properties:
+      TemplateURL: ../../cloudformation/modules/alb.yaml
 
-  #     Parameters:
-  #       ProjectName: !Ref ProjectName
-  #       EnvironmentName: !Ref EnvironmentName
-  #       Scheme: !Ref Scheme
+      Parameters:
+        ProjectName: !Ref ProjectName
+        EnvironmentName: !Ref EnvironmentName
+        Scheme: !Ref Scheme
 
   # ============================================================
   # ECR Registries Nested Stack
   # ============================================================
-  # ECRRegistries:
-  #   Type: AWS::CloudFormation::Stack
-  #   DependsOn:
-  #     - PrivateNetwork
-  #   Properties:
-  #     TemplateURL: ../../cloudformation/modules/ecr.yaml
+  ECRRegistries:
+    Type: AWS::CloudFormation::Stack
+    Condition: ECREnabledEffective
+    DependsOn:
+      - PrivateNetwork
+    Properties:
+      TemplateURL: ../../cloudformation/modules/ecr.yaml
 
-  #     Parameters:
-  #       ProjectName: !Ref ProjectName
-  #       EnvironmentName: !Ref EnvironmentName
-  #       ECRRepositories: !Join [",", !Ref ECRRepositories]
+      Parameters:
+        ProjectName: !Ref ProjectName
+        EnvironmentName: !Ref EnvironmentName
+        ECRRepositories: !Join [",", !Ref ECRRepositories]
 
   # ============================================================
   # RDS Postgres DBs Nested Stack
   # ============================================================
-  # RDSPostgresDBs:
-  #   Type: AWS::CloudFormation::Stack
-  #   DependsOn:
-  #     - PrivateNetwork
-  #   Properties:
-  #     TemplateURL: ../../cloudformation/modules/rds-postgres.yaml
+  RDSPostgresDBs:
+    Type: AWS::CloudFormation::Stack
+    Condition: PostgresDBEnabledEffective
+    DependsOn:
+      - PrivateNetwork
+    Properties:
+      TemplateURL: ../../cloudformation/modules/rds-postgres.yaml
 
-  #     Parameters:
-  #       ProjectName: !Ref ProjectName
-  #       EnvironmentName: !Ref EnvironmentName
-  #       PostgresDBMultiAZ: !Ref PostgresDBMultiAZ
-  #       PostgresDataBases: !Join [",", !Ref PostgresDataBases]
-  #       PostgresDBInstancesClass: !Ref PostgresDBInstancesClass
-  #       PostgresDBAllocatedStorage: !Ref PostgresDBAllocatedStorage
-  #       PostgresDBEngineVersion: !Ref PostgresDBEngineVersion
+      Parameters:
+        ProjectName: !Ref ProjectName
+        EnvironmentName: !Ref EnvironmentName
+        PostgresDBMultiAZ: !Ref PostgresDBMultiAZ
+        PostgresDataBases: !Join [",", !Ref PostgresDataBases]
+        PostgresDBInstancesClass: !Ref PostgresDBInstancesClass
+        PostgresDBAllocatedStorage: !Ref PostgresDBAllocatedStorage
+        PostgresDBEngineVersion: !Ref PostgresDBEngineVersion
 
   # ============================================================
   # CloudFront Distribution Nested Stack
   # ============================================================
-  # CloudFrontDistribution:
-  #   Type: AWS::CloudFormation::Stack
-  #   Condition: CloudFrontEnabled
-  #   DependsOn:
-  #     - ApplicationLoadBalancer
-  #   Properties:
-  #     TemplateURL: ../../cloudformation/modules/cloudfront.yaml
+  CloudFrontDistribution:
+    Type: AWS::CloudFormation::Stack
+    Condition: CloudFrontEnabledEffective
+    DependsOn:
+      - ApplicationLoadBalancer
+    Properties:
+      TemplateURL: ../../cloudformation/modules/cloudfront.yaml
 
-  #     Parameters:
-  #       ProjectName: !Ref ProjectName
-  #       EnvironmentName: !Ref EnvironmentName
-  #       DomainName: !Ref DomainName
-  #       CloudFrontCertificateArn: !Ref CloudFrontCertificateArn
+      Parameters:
+        ProjectName: !Ref ProjectName
+        EnvironmentName: !Ref EnvironmentName
+        DomainName: !Ref DomainName
+        CloudFrontCertificateArn: !Ref CloudFrontCertificateArn

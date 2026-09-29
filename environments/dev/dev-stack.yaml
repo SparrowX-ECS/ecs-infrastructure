@@ -21,6 +21,14 @@ Parameters:
   # ============================================================
   # Network Parameters
   # ============================================================
+  VPCMode:
+    Type: String
+    Default: disabled
+    AllowedValues:
+      - enabled
+      - disabled
+    Description: Enable or disable VPC.
+
   VpcCidr:
     Type: String
     Description: CIDR block for the VPC.
@@ -76,14 +84,42 @@ Parameters:
   # ============================================================
   # Load Balancer Parameters
   # ============================================================
+  LoadBalancerMode:
+    Type: String
+    Default: disabled
+    AllowedValues:
+      - enabled
+      - disabled
+    Description: Enable or disable App Load Balancer.
+
   Scheme:
     Type: String
     Description: Load balancer scheme.
     Default: internet-facing
 
   # ============================================================
+  # ECS Cluster Parameters
+  # ============================================================
+  ECSClusterMode:
+    Type: String
+    Default: disabled
+    AllowedValues:
+      - enabled
+      - disabled
+    Description: Enable or disable ECS cluster.
+
+
+  # ============================================================
   # ECR Parameters
   # ============================================================
+  ECRMode:
+    Type: String
+    Default: disabled
+    AllowedValues:
+      - enabled
+      - disabled
+    Description: Enable or disable ECR repositories.
+
   ECRRepositories:
     Type: CommaDelimitedList
     Description: >
@@ -92,6 +128,14 @@ Parameters:
   # ============================================================
   # RDS Postgres DBs Parameters
   # ============================================================
+  PostgresDBMode:
+    Type: String
+    Default: disabled
+    AllowedValues:
+      - enabled
+      - disabled
+    Description: Enable or disable Postgres DBs.
+  
   PostgresDBMultiAZ:
     Type: String
     Default: 'false'
@@ -120,6 +164,14 @@ Parameters:
   # ============================================================
   # CloudFront Parameters
   # ============================================================
+  CloudFrontMode:
+    Type: String
+    Default: disabled
+    AllowedValues:
+      - enabled
+      - disabled
+    Description: Enable or disable the CloudFront distribution for this environment.
+  
   DomainName:
     Type: String
     Default: ''
@@ -129,16 +181,42 @@ Parameters:
     Type: String
     Description: Path for SSM parameter containing the ACM certificate ARN in us-east-1.
 
-  CloudFrontMode:
-    Type: String
-    Default: disabled
-    AllowedValues:
-      - enabled
-      - disabled
-    Description: Enable or disable the CloudFront distribution for this environment.
-
 Conditions:
+  VPCEnabled: !Equals [!Ref VPCMode, enabled]
+  LoadBalancerEnabled: !Equals [!Ref LoadBalancerMode, enabled]
+  ECREnabled: !Equals [!Ref ECRMode, enabled]
+  ECSClusterEnabled: !Equals [!Ref ECSClusterMode, enabled]
+  PostgresDBEnabled: !Equals [!Ref PostgresDBMode, enabled]
   CloudFrontEnabled: !Equals [!Ref CloudFrontMode, enabled]
+
+# Effective conditions
+
+  LoadBalancerEnabledEffective:
+    Fn::And:
+      - Condition: VPCEnabled
+      - Condition: LoadBalancerEnabled
+
+  ECSClusterEnabledEffective:
+    Fn::And:
+      - Condition: VPCEnabled
+      - Condition: ECSClusterEnabled
+
+  ECREnabledEffective:
+    Fn::And:
+      - Condition: VPCEnabled
+      - Condition: ECREnabled
+
+  PostgresDBEnabledEffective:
+    Fn::And:
+      - Condition: VPCEnabled
+      - Condition: PostgresDBEnabled
+
+  CloudFrontEnabledEffective:
+    Fn::And:
+      - Condition: VPCEnabled
+      - Condition: LoadBalancerEnabled
+      - Condition: CloudFrontEnabled
+
 
 Resources:
 
@@ -147,7 +225,7 @@ Resources:
   # ============================================================
   PublicNetwork:
     Type: AWS::CloudFormation::Stack
-
+    Condition: VPCEnabled
     Properties:
       TemplateURL: ../../cloudformation/modules/public-network.yaml
 
@@ -164,6 +242,7 @@ Resources:
   # ============================================================
   PrivateNetwork:
     Type: AWS::CloudFormation::Stack
+    Condition: VPCEnabled
     DependsOn:
       - PublicNetwork
     Properties:
@@ -184,6 +263,7 @@ Resources:
   # ============================================================
   ECSCluster:
     Type: AWS::CloudFormation::Stack
+    Condition: ECSClusterEnabledEffective
     DependsOn:
       - PublicNetwork
     Properties:
@@ -198,6 +278,7 @@ Resources:
   # ============================================================
   ApplicationLoadBalancer:
     Type: AWS::CloudFormation::Stack
+    Condition: LoadBalancerEnabledEffective
     DependsOn:
       - PublicNetwork
     Properties:
@@ -213,6 +294,7 @@ Resources:
   # ============================================================
   ECRRegistries:
     Type: AWS::CloudFormation::Stack
+    Condition: ECREnabledEffective
     DependsOn:
       - PrivateNetwork
     Properties:
@@ -228,6 +310,7 @@ Resources:
   # ============================================================
   RDSPostgresDBs:
     Type: AWS::CloudFormation::Stack
+    Condition: PostgresDBEnabledEffective
     DependsOn:
       - PrivateNetwork
     Properties:
@@ -247,7 +330,7 @@ Resources:
   # ============================================================
   CloudFrontDistribution:
     Type: AWS::CloudFormation::Stack
-    Condition: CloudFrontEnabled
+    Condition: CloudFrontEnabledEffective
     DependsOn:
       - ApplicationLoadBalancer
     Properties:

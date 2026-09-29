@@ -3,6 +3,7 @@ Project:
   Environment: dev
 
 Network:
+  Mode: enabled
   VpcCidr: 10.0.0.0/16
 
   PublicSubnets:
@@ -21,9 +22,14 @@ Network:
     C: disabled
 
 LoadBalancer:
+  Mode: enabled
   Scheme: internet-facing
 
+ECS:
+  Mode: enabled
+
 ECR:
+  Mode: enabled
   Repositories:
     - customerapi
     - taskapi
@@ -33,6 +39,7 @@ ECR:
     - webportal
 
 PostgreSQL:
+  Mode: enabled
   Databases:
     - customerdb
     - taskdb
