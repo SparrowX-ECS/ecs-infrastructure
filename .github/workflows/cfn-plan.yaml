@@ -51,7 +51,8 @@ jobs:
       - name: Validate CloudFormation syntax
         run: |
           cfn-lint \
-            --ignore-checks W3002 \
+            -i W3002 \
+            -- \
             cloudformation/*.yaml \
             cloudformation/modules/*.yaml \
             environments/dev/dev-stack.yaml \
