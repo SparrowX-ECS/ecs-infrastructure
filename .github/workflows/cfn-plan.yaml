@@ -104,6 +104,27 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Prepare Dev plan PR comment
+        if: always()
+        run: |
+          {
+            echo '## CloudFormation plan — Dev'
+            echo
+            echo '```text'
+            if [ -f cfn-plan-dev-output.txt ]; then
+              sed -n '1,240p' cfn-plan-dev-output.txt
+            else
+              echo 'The Dev plan did not start; inspect the workflow logs.'
+            fi
+            echo '```'
+          } > cfn-plan-dev-comment.txt
+
+      - name: Comment Dev plan on PR
+        if: always()
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: cfn-plan-dev
+          path: cfn-plan-dev-comment.txt
 
   # ============================================================
   # Plan Prod
@@ -146,3 +167,25 @@ jobs:
             fi
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Prepare Prod plan PR comment
+        if: always()
+        run: |
+          {
+            echo '## CloudFormation plan — Prod'
+            echo
+            echo '```text'
+            if [ -f cfn-plan-prod-output.txt ]; then
+              sed -n '1,240p' cfn-plan-prod-output.txt
+            else
+              echo 'The Prod plan did not start; inspect the workflow logs.'
+            fi
+            echo '```'
+          } > cfn-plan-prod-comment.txt
+
+      - name: Comment Prod plan on PR
+        if: always()
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: cfn-plan-prod
+          path: cfn-plan-prod-comment.txt
