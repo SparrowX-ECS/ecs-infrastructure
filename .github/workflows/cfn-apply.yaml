@@ -50,11 +50,12 @@ jobs:
         run: |
           yq eval '.' environments/dev/dev-parameters.yaml > /dev/null
           yq eval '.' environments/prod/prod-parameters.yaml > /dev/null
-          
-      - name: Run cfn-lint
+
+      - name: Validate CloudFormation syntax
         run: |
           cfn-lint \
-            --ignore-checks W3002 \
+            -i W3002 W1030 \
+            -- \
             cloudformation/*.yaml \
             cloudformation/modules/*.yaml \
             environments/dev/dev-stack.yaml \

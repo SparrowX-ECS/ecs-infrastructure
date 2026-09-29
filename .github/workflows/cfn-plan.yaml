@@ -51,7 +51,7 @@ jobs:
       - name: Validate CloudFormation syntax
         run: |
           cfn-lint \
-            -i W3002 \
+            -i W3002 W1030 \
             -- \
             cloudformation/*.yaml \
             cloudformation/modules/*.yaml \

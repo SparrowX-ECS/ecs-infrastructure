@@ -6,12 +6,6 @@ Description: >
 Transform:
   - AWS::LanguageExtensions
 
-Metadata:
-  cfn-lint:
-    config:
-      ignore_checks:
-        - W1030
-
 Parameters:
 
   # ============================================================
