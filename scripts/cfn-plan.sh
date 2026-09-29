@@ -267,7 +267,7 @@ cat > "$TMP_JSON_PARAMETERS_FILE" <<EOF
     "ParameterValue": "$LOADBALANCER_MODE"
   },
   {
-    "ParameterKey": "PostgreDBMode",
+    "ParameterKey": "PostgresDBMode",
     "ParameterValue": "$POSTGRESQL_MODE"
   },
   {
@@ -317,35 +317,6 @@ STACK_STATUS=$(
 )
 
 echo "Current stack status: $STACK_STATUS"
-
-
-# ============================================================
-# Create change set
-# ============================================================
-
-CHANGE_SET_NAME="plan-${GITHUB_RUN_ID:-$(date +%s)}"
-
-echo "==> Creating CloudFormation change set..."
-
-if [[ "$STACK_STATUS" == "NOT_FOUND" ]]; then
-
-    CHANGE_SET_TYPE="CREATE"
-
-else
-
-    CHANGE_SET_TYPE="UPDATE"
-
-fi
-
-aws cloudformation create-change-set \
-    --stack-name "$ROOT_STACK_NAME" \
-    --change-set-name "$CHANGE_SET_NAME" \
-    --change-set-type "$CHANGE_SET_TYPE" \
-    --template-body "file://${PACKAGED_TEMPLATE}" \
-    --parameters "file://${TMP_JSON_PARAMETERS_FILE}" \
-    --capabilities CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND \
-    --region "$REGION"
-
 
 # ============================================================
 # Handle existing REVIEW_IN_PROGRESS stack

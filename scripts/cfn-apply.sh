@@ -191,7 +191,7 @@ cat > "$TMP_JSON_PARAMETERS_FILE" <<EOF
     "ParameterValue": "$LOADBALANCER_MODE"
   },
   {
-    "ParameterKey": "PostgreDBMode",
+    "ParameterKey": "PostgresDBMode",
     "ParameterValue": "$POSTGRESQL_MODE"
   },
   {
