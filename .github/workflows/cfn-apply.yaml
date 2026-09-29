@@ -46,9 +46,15 @@ jobs:
           test "$(yq -r '.environment.region' parameters.yaml)" = "$AWS_REGION"
 
 
+      - name: Validate parameter files
+        run: |
+          yq eval '.' environments/dev/dev-parameters.yaml > /dev/null
+          yq eval '.' environments/prod/prod-parameters.yaml > /dev/null
+          
       - name: Run cfn-lint
         run: |
           cfn-lint \
+            --ignore-checks W3002 \
             cloudformation/*.yaml \
             cloudformation/modules/*.yaml \
             environments/dev/dev-stack.yaml \

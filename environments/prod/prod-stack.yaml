@@ -76,69 +76,69 @@ Parameters:
   # ============================================================
   # Load Balancer Parameters
   # ============================================================
-  Scheme:
-    Type: String
-    Description: Load balancer scheme.
-    Default: internet-facing
+  # Scheme:
+  #   Type: String
+  #   Description: Load balancer scheme.
+  #   Default: internet-facing
 
   # ============================================================
   # ECR Parameters
   # ============================================================
-  ECRRepositories:
-    Type: CommaDelimitedList
-    Description: >
-      Comma-separated list of for ECR repositories to be created. Use lowercase letters and numbers only.
+  # ECRRepositories:
+  #   Type: CommaDelimitedList
+  #   Description: >
+  #     Comma-separated list of for ECR repositories to be created. Use lowercase letters and numbers only.
 
   # ============================================================
   # RDS Postgres DBs Parameters
   # ============================================================
-  PostgresDBMultiAZ:
-    Type: String
-    Default: 'false'
-    Description: Whether to deploy each database in multiple Availability Zones.
+  # PostgresDBMultiAZ:
+  #   Type: String
+  #   Default: 'false'
+  #   Description: Whether to deploy each database in multiple Availability Zones.
 
-  PostgresDataBases:
-    Type: CommaDelimitedList
-    Description: >
-      Comma-separated list of Postgres database names to be created. Only lowercase letters and numbers are allowed. Naming convention example: customerdb, taskdb  
+  # PostgresDataBases:
+  #   Type: CommaDelimitedList
+  #   Description: >
+  #     Comma-separated list of Postgres database names to be created. Only lowercase letters and numbers are allowed. Naming convention example: customerdb, taskdb  
 
-  PostgresDBInstancesClass:
-    Type: String
-    Default: db.t4g.micro
-    Description: Smallest practical PostgreSQL RDS instance class for this project.
+  # PostgresDBInstancesClass:
+  #   Type: String
+  #   Default: db.t4g.micro
+  #   Description: Smallest practical PostgreSQL RDS instance class for this project.
 
-  PostgresDBAllocatedStorage:
-    Type: Number
-    Default: 20
-    Description: Allocated storage in GiB.
+  # PostgresDBAllocatedStorage:
+  #   Type: Number
+  #   Default: 20
+  #   Description: Allocated storage in GiB.
 
-  PostgresDBEngineVersion:
-    Type: String
-    Default: '16'
-    Description: PostgreSQL major engine version.
+  # PostgresDBEngineVersion:
+  #   Type: String
+  #   Default: '16'
+  #   Description: PostgreSQL major engine version.
 
   # ============================================================
   # CloudFront Parameters
   # ============================================================
-  DomainName:
-    Type: String
-    Default: ''
-    Description: Optional custom hostname, for example app.example.com.
+#   DomainName:
+#     Type: String
+#     Default: ''
+#     Description: Optional custom hostname, for example app.example.com.
 
-  CloudFrontCertificateArn:
-    Type: String
-    Description: Path for SSM parameter containing the ACM certificate ARN in us-east-1.
+#   CloudFrontCertificateArn:
+#     Type: String
+#     Description: Path for SSM parameter containing the ACM certificate ARN in us-east-1.
 
-  CloudFrontMode:
-    Type: String
-    Default: disabled
-    AllowedValues:
-      - enabled
-      - disabled
-    Description: Enable or disable the CloudFront distribution for this environment.
+#   CloudFrontMode:
+#     Type: String
+#     Default: disabled
+#     AllowedValues:
+#       - enabled
+#       - disabled
+#     Description: Enable or disable the CloudFront distribution for this environment.
 
-Conditions:
-  CloudFrontEnabled: !Equals [!Ref CloudFrontMode, enabled]
+# Conditions:
+#   CloudFrontEnabled: !Equals [!Ref CloudFrontMode, enabled]
 
 Resources:
 

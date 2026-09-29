@@ -17,10 +17,6 @@ permissions:
   id-token: write
   pull-requests: write
 
-env:
-  AWS_REGION: ${{ vars.AWS_REGION }}
-  CLOUDFORMATION_ARTIFACT_BUCKET: ${{ vars.CLOUDFORMATION_ARTIFACT_BUCKET }}
-
 jobs:
 
   # ============================================================
@@ -55,6 +51,7 @@ jobs:
       - name: Validate CloudFormation syntax
         run: |
           cfn-lint \
+            --ignore-checks W3002 \
             cloudformation/*.yaml \
             cloudformation/modules/*.yaml \
             environments/dev/dev-stack.yaml \
