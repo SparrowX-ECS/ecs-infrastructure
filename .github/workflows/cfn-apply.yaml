@@ -13,6 +13,11 @@ on:
 permissions:
   contents: read
 
+env:
+  AWS_REGION: ${{ vars.AWS_REGION }}
+  CLOUDFORMATION_ARTIFACT_BUCKET: ${{ vars.CLOUDFORMATION_ARTIFACT_BUCKET }}
+
+
 jobs:
 
   # ============================================================
