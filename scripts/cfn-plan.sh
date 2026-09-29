@@ -41,6 +41,54 @@ TMP_JSON_PARAMETERS_FILE="/tmp/${ENVIRONMENT}-parameters.json"
 ARTIFACT_PREFIX="artifacts/${ENVIRONMENT}"
 PACKAGED_S3_KEY="${ENVIRONMENT}/packaged.yaml"
 
+CHANGE_SET_NAME="plan-${GITHUB_RUN_ID:-$(date +%s)}"
+
+# Set to true only when this plan created a temporary CREATE
+# change set / REVIEW_IN_PROGRESS stack.
+CLEANUP_REVIEW_STACK=false
+
+
+# ============================================================
+# Cleanup
+# ============================================================
+
+cleanup() {
+    local EXIT_CODE=$?
+
+    if [[ "$CLEANUP_REVIEW_STACK" == "true" ]]; then
+
+        echo
+        echo "==> Cleaning up temporary CloudFormation review stack..."
+
+        if aws cloudformation describe-stacks \
+            --stack-name "$ROOT_STACK_NAME" \
+            --region "$REGION" \
+            >/dev/null 2>&1; then
+
+            aws cloudformation delete-stack \
+                --stack-name "$ROOT_STACK_NAME" \
+                --region "$REGION" \
+                || true
+
+            echo "==> Waiting for review stack deletion..."
+
+            aws cloudformation wait stack-delete-complete \
+                --stack-name "$ROOT_STACK_NAME" \
+                --region "$REGION" \
+                || true
+
+        else
+            echo "==> Review stack already absent."
+        fi
+
+        echo "==> Cleanup complete."
+    fi
+
+    exit "$EXIT_CODE"
+}
+
+trap cleanup EXIT
+
 
 # ============================================================
 # Validate files
@@ -300,28 +348,77 @@ aws cloudformation create-change-set \
 
 
 # ============================================================
+# Handle existing REVIEW_IN_PROGRESS stack
+# ============================================================
+
+if [[ "$STACK_STATUS" == "REVIEW_IN_PROGRESS" ]]; then
+
+    echo
+    echo "==> Found stale REVIEW_IN_PROGRESS stack."
+    echo "==> Deleting it before creating a fresh plan..."
+
+    aws cloudformation delete-stack \
+        --stack-name "$ROOT_STACK_NAME" \
+        --region "$REGION"
+
+    aws cloudformation wait stack-delete-complete \
+        --stack-name "$ROOT_STACK_NAME" \
+        --region "$REGION"
+
+    STACK_STATUS="NOT_FOUND"
+
+    echo "==> Stale review stack removed."
+fi
+
+
+# ============================================================
+# Determine change set type
+# ============================================================
+
+if [[ "$STACK_STATUS" == "NOT_FOUND" ]]; then
+
+    CHANGE_SET_TYPE="CREATE"
+
+    # A CREATE change set creates a temporary REVIEW_IN_PROGRESS
+    # stack. It must therefore be deleted during cleanup.
+    CLEANUP_REVIEW_STACK=true
+
+else
+
+    CHANGE_SET_TYPE="UPDATE"
+
+fi
+
+echo "==> Change set type: $CHANGE_SET_TYPE"
+
+
+# ============================================================
+# Create change set
+# ============================================================
+
+echo "==> Creating CloudFormation change set..."
+
+aws cloudformation create-change-set \
+    --stack-name "$ROOT_STACK_NAME" \
+    --change-set-name "$CHANGE_SET_NAME" \
+    --change-set-type "$CHANGE_SET_TYPE" \
+    --template-body "file://${PACKAGED_TEMPLATE}" \
+    --parameters "file://${TMP_JSON_PARAMETERS_FILE}" \
+    --capabilities CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND \
+    --region "$REGION"
+
+
+# ============================================================
 # Wait for change set
 # ============================================================
 
 echo "==> Waiting for change set..."
 
-if [[ "$CHANGE_SET_TYPE" == "CREATE" ]]; then
-
-    aws cloudformation wait \
-        change-set-create-complete \
-        --stack-name "$ROOT_STACK_NAME" \
-        --change-set-name "$CHANGE_SET_NAME" \
-        --region "$REGION"
-
-else
-
-    aws cloudformation wait \
-        change-set-create-complete \
-        --stack-name "$ROOT_STACK_NAME" \
-        --change-set-name "$CHANGE_SET_NAME" \
-        --region "$REGION"
-
-fi
+aws cloudformation wait \
+    change-set-create-complete \
+    --stack-name "$ROOT_STACK_NAME" \
+    --change-set-name "$CHANGE_SET_NAME" \
+    --region "$REGION"
 
 
 # ============================================================
@@ -340,6 +437,10 @@ aws cloudformation describe-change-set \
     --query 'Changes[].ResourceChange.[Action,LogicalResourceId,ResourceType,Replacement]' \
     --output table
 
+
+# ============================================================
+# Plan complete
+# ============================================================
 
 echo
 echo "============================================================"
