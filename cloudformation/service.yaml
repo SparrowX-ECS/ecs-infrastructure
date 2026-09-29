@@ -34,6 +34,10 @@ Parameters:
     Type: String
     Description: Name of the application service.
 
+  ECRRepoName:
+    Type: String
+    Description: Name of the ECR repository.
+
   FrontendServiceName:
     Type: String
     Description: Name of the frontend service. Used for creating fallback rule to handle errors.
@@ -390,7 +394,7 @@ Resources:
 
         - Name: !Ref ServiceName
 
-          Image: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ServiceName}:${ImageTag}'
+          Image: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ProjectName}-${EnvironmentName}-${ECRRepoName}:${ImageTag}'
 
           Essential: true
 

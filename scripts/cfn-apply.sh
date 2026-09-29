@@ -2,97 +2,259 @@
 
 set -euo pipefail
 
-command -v aws >/dev/null 2>&1 || { echo "aws CLI is required" >&2; exit 1; }
-command -v yq >/dev/null 2>&1 || { echo "yq is required" >&2; exit 1; }
+# ============================================================
+# Configuration
+# ============================================================
+ENVIRONMENT="${1:-}"
+: "${ENVIRONMENT:?Environment argument is required}"
 
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-CFN_DIR="$SCRIPT_DIR/../cloudformation"
-PARAMETERS_FILE="$SCRIPT_DIR/../parameters.yaml"
+: "${AWS_REGION:?AWS_REGION is not set}"
+: "${CLOUDFORMATION_ARTIFACT_BUCKET:?CLOUDFORMATION_ARTIFACT_BUCKET is not set}"
 
-ENVIRONMENT_NAME="$(yq -r '.environment.name' "$PARAMETERS_FILE")"
-REGION="$(yq -r '.environment.region' "$PARAMETERS_FILE")"
+REGION="$AWS_REGION"
+BUCKET="$CLOUDFORMATION_ARTIFACT_BUCKET"
 
-VPC_CIDR="$(yq -r '.network.vpc_cidr' "$PARAMETERS_FILE")"
-AZ_A="$(yq -r '.network.availability_zones.a' "$PARAMETERS_FILE")"
-AZ_B="$(yq -r '.network.availability_zones.b' "$PARAMETERS_FILE")"
-PUBLIC_SUBNET_A="$(yq -r '.network.public_subnets.a' "$PARAMETERS_FILE")"
-PUBLIC_SUBNET_B="$(yq -r '.network.public_subnets.b' "$PARAMETERS_FILE")"
-PRIVATE_SUBNET_A="$(yq -r '.network.private_subnets.a' "$PARAMETERS_FILE")"
-PRIVATE_SUBNET_B="$(yq -r '.network.private_subnets.b' "$PARAMETERS_FILE")"
+ROOT_STACK_NAME="sparrowx-${ENVIRONMENT}-root-stack"
 
-DB_ENGINE_VERSION="$(yq -r '.database.engine_version' "$PARAMETERS_FILE")"
-DB_INSTANCE_CLASS="$(yq -r '.database.instance_class' "$PARAMETERS_FILE")"
-DB_ALLOCATED_STORAGE="$(yq -r '.database.allocated_storage' "$PARAMETERS_FILE")"
-DB_BACKUP_RETENTION="$(yq -r '.database.backup_retention_days' "$PARAMETERS_FILE")"
-DB_MULTI_AZ="$(yq -r '.database.multi_az' "$PARAMETERS_FILE")"
-ALB_SCHEME="$(yq -r '.alb.scheme' "$PARAMETERS_FILE")"
-CLOUDFRONT_ENABLED="$(yq -r '.cloudfront.enabled' "$PARAMETERS_FILE")"
-CLOUDFRONT_DOMAIN_NAME="$(yq -r '.cloudfront.domain_name' "$PARAMETERS_FILE")"
-CLOUDFRONT_CERTIFICATE_PARAMETER="$(yq -r '.cloudfront.certificate_parameter' "$PARAMETERS_FILE")"
+ROOT_TEMPLATE="environments/${ENVIRONMENT}/${ENVIRONMENT}-stack.yaml"
+PARAMETERS_FILE="environments/${ENVIRONMENT}/${ENVIRONMENT}-parameters.yaml"
 
-deploy_stack() {
-  local stack_name="$1"
-  local template="$2"
-  shift 2
+PACKAGED_TEMPLATE="/tmp/${ENVIRONMENT}-packaged.yaml"
+TMP_JSON_PARAMETERS_FILE="/tmp/${ENVIRONMENT}-parameters.json"
 
-  echo "Deploying $stack_name"
-  aws cloudformation deploy \
-    --region "$REGION" \
-    --stack-name "$stack_name" \
-    --template-file "$template" \
-    --parameter-overrides "$@" \
-    --capabilities CAPABILITY_NAMED_IAM \
-    --no-fail-on-empty-changeset
-}
+ARTIFACT_PREFIX="artifacts/${ENVIRONMENT}"
+PACKAGED_S3_KEY="${ENVIRONMENT}/packaged.yaml"
 
-deploy_stack \
-  "${ENVIRONMENT_NAME}-network" \
-  "$CFN_DIR/network.yaml" \
-  EnvironmentName="$ENVIRONMENT_NAME" \
-  VpcCidr="$VPC_CIDR" \
-  AvailabilityZoneA="$AZ_A" \
-  AvailabilityZoneB="$AZ_B" \
-  PublicSubnetACidr="$PUBLIC_SUBNET_A" \
-  PublicSubnetBCidr="$PUBLIC_SUBNET_B" \
-  PrivateSubnetACidr="$PRIVATE_SUBNET_A" \
-  PrivateSubnetBCidr="$PRIVATE_SUBNET_B"
 
-deploy_stack \
-  "${ENVIRONMENT_NAME}-ecr" \
-  "$CFN_DIR/ecr.yaml" \
-  EnvironmentName="$ENVIRONMENT_NAME"
+# ============================================================
+# Validate files
+# ============================================================
 
-deploy_stack \
-  "${ENVIRONMENT_NAME}-ecs-cluster" \
-  "$CFN_DIR/ecs-cluster.yaml" \
-  EnvironmentName="$ENVIRONMENT_NAME"
-
-deploy_stack \
-  "${ENVIRONMENT_NAME}-alb" \
-  "$CFN_DIR/alb.yaml" \
-  EnvironmentName="$ENVIRONMENT_NAME" \
-  Scheme="$ALB_SCHEME"
-
-deploy_stack \
-  "${ENVIRONMENT_NAME}-database" \
-  "$CFN_DIR/database.yaml" \
-  EnvironmentName="$ENVIRONMENT_NAME" \
-  DBEngineVersion="$DB_ENGINE_VERSION" \
-  DBInstanceClass="$DB_INSTANCE_CLASS" \
-  DBAllocatedStorage="$DB_ALLOCATED_STORAGE" \
-  DBBackupRetentionDays="$DB_BACKUP_RETENTION" \
-  DBMultiAZ="$DB_MULTI_AZ"
-
-if [[ "$CLOUDFRONT_ENABLED" == "true" ]]; then
-  [[ -n "$CLOUDFRONT_DOMAIN_NAME" ]] || { echo 'cloudfront.domain_name is required when CloudFront is enabled' >&2; exit 1; }
-  [[ -n "$CLOUDFRONT_CERTIFICATE_PARAMETER" ]] || { echo 'cloudfront.certificate_parameter is required when CloudFront is enabled' >&2; exit 1; }
-
-  deploy_stack \
-    "${ENVIRONMENT_NAME}-cloudfront" \
-    "$CFN_DIR/cloudfront.yaml" \
-    EnvironmentName="$ENVIRONMENT_NAME" \
-    DomainName="$CLOUDFRONT_DOMAIN_NAME" \
-    CloudFrontCertificateArn="$CLOUDFRONT_CERTIFICATE_PARAMETER"
+if [[ ! -f "$ROOT_TEMPLATE" ]]; then
+    echo "ERROR: Root template not found: $ROOT_TEMPLATE"
+    exit 1
 fi
 
-echo "CloudFormation apply complete."
+if [[ ! -f "$PARAMETERS_FILE" ]]; then
+    echo "ERROR: Parameters file not found: $PARAMETERS_FILE"
+    exit 1
+fi
+
+
+# ============================================================
+# Read parameters.yaml
+# ============================================================
+
+PROJECT_NAME=$(yq -r '.Project.Name' "$PARAMETERS_FILE")
+ENVIRONMENT_NAME=$(yq -r '.Project.Environment' "$PARAMETERS_FILE")
+
+VPC_CIDR=$(yq -r '.Network.VpcCidr' "$PARAMETERS_FILE")
+
+PUBLIC_SUBNET_A=$(yq -r '.Network.PublicSubnets.A' "$PARAMETERS_FILE")
+PUBLIC_SUBNET_B=$(yq -r '.Network.PublicSubnets.B' "$PARAMETERS_FILE")
+PUBLIC_SUBNET_C=$(yq -r '.Network.PublicSubnets.C' "$PARAMETERS_FILE")
+
+PRIVATE_SUBNET_A=$(yq -r '.Network.PrivateSubnets.A' "$PARAMETERS_FILE")
+PRIVATE_SUBNET_B=$(yq -r '.Network.PrivateSubnets.B' "$PARAMETERS_FILE")
+PRIVATE_SUBNET_C=$(yq -r '.Network.PrivateSubnets.C' "$PARAMETERS_FILE")
+
+NAT_GW_A=$(yq -r '.Network.NatGateways.A' "$PARAMETERS_FILE")
+NAT_GW_B=$(yq -r '.Network.NatGateways.B' "$PARAMETERS_FILE")
+NAT_GW_C=$(yq -r '.Network.NatGateways.C' "$PARAMETERS_FILE")
+
+ALB_SCHEME=$(yq -r '.LoadBalancer.Scheme' "$PARAMETERS_FILE")
+
+SERVICES=$(yq -r '.ECR.Repositories | join(",")' "$PARAMETERS_FILE")
+
+POSTGRES_DATABASES=$(yq -r '.PostgreSQL.Databases | join(",")' "$PARAMETERS_FILE")
+POSTGRES_MULTIAZ=$(yq -r '.PostgreSQL.MultiAZ' "$PARAMETERS_FILE")
+POSTGRES_INSTANCE_CLASS=$(yq -r '.PostgreSQL.InstanceClass' "$PARAMETERS_FILE")
+POSTGRES_STORAGE=$(yq -r '.PostgreSQL.AllocatedStorage' "$PARAMETERS_FILE")
+POSTGRES_ENGINE_VERSION=$(yq -r '.PostgreSQL.EngineVersion' "$PARAMETERS_FILE")
+
+CLOUDFRONT_MODE=$(yq -r '.CloudFront.Mode' "$PARAMETERS_FILE")
+CLOUDFRONT_CERTIFICATE_ARN=$(yq -r '.CloudFront.CertificateArn' "$PARAMETERS_FILE")
+DOMAIN_NAME=$(yq -r '.CloudFront.DomainName' "$PARAMETERS_FILE")
+
+
+# ============================================================
+# Generate AWS CLI parameter file
+# ============================================================
+
+cat > "$TMP_JSON_PARAMETERS_FILE" <<EOF
+[
+  {
+    "ParameterKey": "ProjectName",
+    "ParameterValue": "$PROJECT_NAME"
+  },
+  {
+    "ParameterKey": "EnvironmentName",
+    "ParameterValue": "$ENVIRONMENT_NAME"
+  },
+  {
+    "ParameterKey": "VpcCidr",
+    "ParameterValue": "$VPC_CIDR"
+  },
+  {
+    "ParameterKey": "PublicSubnetACidr",
+    "ParameterValue": "$PUBLIC_SUBNET_A"
+  },
+  {
+    "ParameterKey": "PublicSubnetBCidr",
+    "ParameterValue": "$PUBLIC_SUBNET_B"
+  },
+  {
+    "ParameterKey": "PublicSubnetCCidr",
+    "ParameterValue": "$PUBLIC_SUBNET_C"
+  },
+  {
+    "ParameterKey": "PrivateSubnetACidr",
+    "ParameterValue": "$PRIVATE_SUBNET_A"
+  },
+  {
+    "ParameterKey": "PrivateSubnetBCidr",
+    "ParameterValue": "$PRIVATE_SUBNET_B"
+  },
+  {
+    "ParameterKey": "PrivateSubnetCCidr",
+    "ParameterValue": "$PRIVATE_SUBNET_C"
+  },
+  {
+    "ParameterKey": "NatGWSubnetA",
+    "ParameterValue": "$NAT_GW_A"
+  },
+  {
+    "ParameterKey": "NatGWSubnetB",
+    "ParameterValue": "$NAT_GW_B"
+  },
+  {
+    "ParameterKey": "NatGWSubnetC",
+    "ParameterValue": "$NAT_GW_C"
+  },
+  {
+    "ParameterKey": "Scheme",
+    "ParameterValue": "$ALB_SCHEME"
+  },
+  {
+    "ParameterKey": "ECRRepositories",
+    "ParameterValue": "$SERVICES"
+  },
+  {
+    "ParameterKey": "PostgresDataBases",
+    "ParameterValue": "$POSTGRES_DATABASES"
+  },
+  {
+    "ParameterKey": "PostgresDBMultiAZ",
+    "ParameterValue": "$POSTGRES_MULTIAZ"
+  },
+  {
+    "ParameterKey": "PostgresDBInstancesClass",
+    "ParameterValue": "$POSTGRES_INSTANCE_CLASS"
+  },
+  {
+    "ParameterKey": "PostgresDBAllocatedStorage",
+    "ParameterValue": "$POSTGRES_STORAGE"
+  },
+  {
+    "ParameterKey": "PostgresDBEngineVersion",
+    "ParameterValue": "$POSTGRES_ENGINE_VERSION"
+  },
+  {
+    "ParameterKey": "CloudFrontMode",
+    "ParameterValue": "$CLOUDFRONT_MODE"
+  },
+  {
+    "ParameterKey": "CloudFrontCertificateArn",
+    "ParameterValue": "$CLOUDFRONT_CERTIFICATE_ARN"
+  },
+  {
+    "ParameterKey": "DomainName",
+    "ParameterValue": "$DOMAIN_NAME"
+  }
+]
+EOF
+
+
+# ============================================================
+# Package CloudFormation templates
+# ============================================================
+
+echo "==> Packaging CloudFormation templates..."
+
+aws cloudformation package \
+    --template-file "$ROOT_TEMPLATE" \
+    --s3-bucket "$BUCKET" \
+    --s3-prefix "$ARTIFACT_PREFIX" \
+    --output-template-file "$PACKAGED_TEMPLATE" \
+    --region "$REGION"
+
+
+# ============================================================
+# Upload packaged root template
+# ============================================================
+
+echo "==> Uploading packaged root template..."
+
+aws s3 cp \
+    "$PACKAGED_TEMPLATE" \
+    "s3://${BUCKET}/${PACKAGED_S3_KEY}" \
+    --region "$REGION"
+
+
+# ============================================================
+# Check stack state
+# ============================================================
+
+echo "==> Checking stack status..."
+
+STACK_STATUS=$(
+    aws cloudformation describe-stacks \
+        --stack-name "$ROOT_STACK_NAME" \
+        --region "$REGION" \
+        --query 'Stacks[0].StackStatus' \
+        --output text \
+        2>/dev/null || echo "NOT_FOUND"
+)
+
+echo "Current stack status: $STACK_STATUS"
+
+
+# ============================================================
+# Recover failed creation
+# ============================================================
+
+if [[ "$STACK_STATUS" == "ROLLBACK_COMPLETE" ||
+      "$STACK_STATUS" == "ROLLBACK_FAILED" ]]; then
+
+    echo "==> Stack is $STACK_STATUS."
+    echo "==> Deleting failed stack..."
+
+    aws cloudformation delete-stack \
+        --stack-name "$ROOT_STACK_NAME" \
+        --region "$REGION"
+
+    echo "==> Waiting for stack deletion..."
+
+    aws cloudformation wait stack-delete-complete \
+        --stack-name "$ROOT_STACK_NAME" \
+        --region "$REGION"
+
+    echo "==> Failed stack deleted."
+
+fi
+
+
+# ============================================================
+# Deploy
+# ============================================================
+
+echo "==> Deploying ${ROOT_STACK_NAME}..."
+
+aws cloudformation deploy \
+    --template-file "$PACKAGED_TEMPLATE" \
+    --stack-name "$ROOT_STACK_NAME" \
+    --parameter-overrides "file://${TMP_JSON_PARAMETERS_FILE}" \
+    --region "$REGION" \
+    --capabilities CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND
+
+echo "==> Deployment completed successfully."

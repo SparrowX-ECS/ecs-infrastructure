@@ -1,0 +1,50 @@
+Project:
+  Name: sparrowx
+  Environment: prod
+
+Network:
+  VpcCidr: 10.10.0.0/16
+
+  PublicSubnets:
+    A: 10.10.1.0/24
+    B: 10.10.2.0/24
+    C: 10.10.3.0/24
+
+  PrivateSubnets:
+    A: 10.10.4.0/24
+    B: 10.10.5.0/24
+    C: 10.10.6.0/24
+
+  NatGateways:
+    A: enabled
+    B: disabled
+    C: disabled
+
+LoadBalancer:
+  Scheme: internet-facing
+
+ECR:
+  Repositories:
+    - customerapi
+    - taskapi
+    - billingapi
+    - notificationapi
+    - reportingapi
+    - webportal
+
+PostgreSQL:
+  Databases:
+    - customerdb
+    - taskdb
+    - billingdb
+    - notificationdb
+
+  MultiAZ: false
+  InstanceClass: db.t4g.micro
+  AllocatedStorage: 20
+  EngineVersion: "16"
+
+CloudFront:
+  Mode: disabled
+  CertificateArn: /sparrowx/cloudfront/acm-certificate-arn
+  DomainName: sparrowx-prod.mo2cloud.com

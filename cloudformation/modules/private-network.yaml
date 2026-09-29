@@ -17,18 +17,6 @@ Parameters:
     Description: Project name used for resource naming.
     Default: sparrowx
 
-  AvailabilityZoneA:
-    Type: AWS::EC2::AvailabilityZone::Name
-    Description: First Availability Zone.
-
-  AvailabilityZoneB:
-    Type: AWS::EC2::AvailabilityZone::Name
-    Description: Second Availability Zone.
-
-  AvailabilityZoneC:
-    Type: AWS::EC2::AvailabilityZone::Name
-    Description: Third Availability Zone.
-
   PrivateSubnetACidr:
     Type: String
     Description: CIDR block for the first private subnet.
@@ -85,7 +73,7 @@ Resources:
     Properties:
       VpcId: 
         Fn::ImportValue: !Sub '${ProjectName}-${EnvironmentName}-VpcId'
-      AvailabilityZone: !Ref AvailabilityZoneA
+      AvailabilityZone: !Select [1, !GetAZs '']
       CidrBlock: !Ref PrivateSubnetACidr
 
       MapPublicIpOnLaunch: false
@@ -105,7 +93,7 @@ Resources:
     Properties:
       VpcId: 
         Fn::ImportValue: !Sub '${ProjectName}-${EnvironmentName}-VpcId'
-      AvailabilityZone: !Ref AvailabilityZoneB
+      AvailabilityZone: !Select [1, !GetAZs '']
       CidrBlock: !Ref PrivateSubnetBCidr
 
       MapPublicIpOnLaunch: false
@@ -125,7 +113,7 @@ Resources:
     Properties:
       VpcId: 
         Fn::ImportValue: !Sub '${ProjectName}-${EnvironmentName}-VpcId'
-      AvailabilityZone: !Ref AvailabilityZoneC
+      AvailabilityZone: !Select [2, !GetAZs '']
       CidrBlock: !Ref PrivateSubnetCCidr
 
       MapPublicIpOnLaunch: false

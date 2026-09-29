@@ -23,8 +23,7 @@ Parameters:
 
   CloudFrontCertificateArn:
     Type: AWS::SSM::Parameter::Value<String>
-    Default: /sparrowx/cloudfront/acm-certificate-arn
-    Description: SSM parameter containing the ACM certificate ARN in us-east-1.
+    Description: Path for SSM parameter containing the ACM certificate ARN in us-east-1.
 
 Conditions:
 

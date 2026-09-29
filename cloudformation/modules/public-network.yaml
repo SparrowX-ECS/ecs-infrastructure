@@ -21,18 +21,6 @@ Parameters:
     Type: String
     Description: CIDR block for the VPC.
 
-  AvailabilityZoneA:
-    Type: AWS::EC2::AvailabilityZone::Name
-    Description: First Availability Zone.
-
-  AvailabilityZoneB:
-    Type: AWS::EC2::AvailabilityZone::Name
-    Description: Second Availability Zone.
-
-  AvailabilityZoneC:
-    Type: AWS::EC2::AvailabilityZone::Name
-    Description: Third Availability Zone.
-
   PublicSubnetACidr:
     Type: String
     Description: CIDR block for the first public subnet.
@@ -99,7 +87,7 @@ Resources:
 
     Properties:
       VpcId: !Ref VPC
-      AvailabilityZone: !Ref AvailabilityZoneA
+      AvailabilityZone: !Select [0, !GetAZs '']
       CidrBlock: !Ref PublicSubnetACidr
 
       MapPublicIpOnLaunch: true
@@ -118,7 +106,7 @@ Resources:
 
     Properties:
       VpcId: !Ref VPC
-      AvailabilityZone: !Ref AvailabilityZoneB
+      AvailabilityZone: !Select [1, !GetAZs '']
       CidrBlock: !Ref PublicSubnetBCidr
 
       MapPublicIpOnLaunch: true
@@ -137,7 +125,7 @@ Resources:
 
     Properties:
       VpcId: !Ref VPC
-      AvailabilityZone: !Ref AvailabilityZoneC
+      AvailabilityZone: !Select [2, !GetAZs '']
       CidrBlock: !Ref PublicSubnetCCidr
 
       MapPublicIpOnLaunch: true

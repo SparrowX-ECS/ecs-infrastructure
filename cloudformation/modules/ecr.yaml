@@ -19,21 +19,20 @@ Parameters:
     Description: Project name used for resource naming.
     Default: sparrowx
 
-  Services:
+  ECRRepositories:
     Type: CommaDelimitedList
     Description: >
-      Comma-separated list of service names for which ECR repositories
-      should be created.
+      Comma-separated list of for ECR repositories to be created. Use lowercase letters and numbers only.
 
 Resources:
 
   'Fn::ForEach::EcrRepositories':
-    - ServiceName
-    - !Ref Services
-    - '${ServiceName}Repository':
+    - ECRRepoName
+    - !Ref ECRRepositories
+    - '${ECRRepoName}Repository':
         Type: AWS::ECR::Repository
         Properties:
-          RepositoryName: !Sub '${ProjectName}-${EnvironmentName}-${ServiceName}'
+          RepositoryName: !Sub '${ProjectName}-${EnvironmentName}-${ECRRepoName}'
           ImageScanningConfiguration:
             ScanOnPush: true
           ImageTagMutability: IMMUTABLE
@@ -43,5 +42,5 @@ Resources:
               Value: !Ref EnvironmentName
             - Key: Project
               Value: !Ref ProjectName
-            - Key: Service
-              Value: !Ref ServiceName
+            - Key: ECRRepoName
+              Value: !Ref ECRRepoName

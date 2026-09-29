@@ -18,17 +18,17 @@ Parameters:
     Description: Project name used for resource naming.
     Default: sparrowx
 
-  DBInstanceClass:
+  PostgresDBInstancesClass:
     Type: String
     Default: db.t4g.micro
     Description: Smallest practical PostgreSQL RDS instance class for this project.
 
-  DBAllocatedStorage:
+  PostgresDBAllocatedStorage:
     Type: Number
     Default: 20
     Description: Allocated storage in GiB.
 
-  DBEngineVersion:
+  PostgresDBEngineVersion:
     Type: String
     Default: '16'
     Description: PostgreSQL major engine version.
@@ -40,7 +40,7 @@ Parameters:
     MaxValue: 35
     Description: Number of days to retain automated backups.
 
-  DBMultiAZ:
+  PostgresDBMultiAZ:
     Type: String
     Default: 'false'
     AllowedValues:
@@ -48,19 +48,19 @@ Parameters:
       - 'false'
     Description: Whether to deploy each database in multiple Availability Zones.
 
-  DataBases:
+  PostgresDataBases:
     Type: CommaDelimitedList
     Description: >
-      Comma-separated list of Postgres database names to be created. Naming convention example: customerdb, taskdb 
+      Comma-separated list of Postgres database names to be created. Only lowercase letters and numbers are allowed. Naming convention example: customerdb, taskdb 
 
 Resources:
 
   # ============================================================
-  # Customer API
+  # RDS Postgres Databases
   # ============================================================
   'Fn::ForEach::RDSDatabases':
     - DBName
-    - !Ref Databases
+    - !Ref PostgresDataBases
     - '${DBName}DatabaseSecurityGroup':
         Type: AWS::EC2::SecurityGroup
         Properties:
@@ -122,23 +122,23 @@ Resources:
         Properties:
           DBInstanceIdentifier: !Sub '${ProjectName}-${EnvironmentName}-${DBName}'
           Engine: postgres
-          EngineVersion: !Ref DBEngineVersion
-          DBInstanceClass: !Ref DBInstanceClass
-          AllocatedStorage: !Ref DBAllocatedStorage
+          EngineVersion: !Ref PostgresDBEngineVersion
+          DBInstanceClass: !Ref PostgresDBInstancesClass
+          AllocatedStorage: !Ref PostgresDBAllocatedStorage
           StorageType: gp3
           StorageEncrypted: true
           DBName: !Sub '${DBName}'
           
           MasterUsername: !Sub
             - '{{resolve:secretsmanager:${Secret}:SecretString:username}}'
-            - Secret:
+            - Secret: !Ref
                 Fn::Sub: '${DBName}DatabaseSecret'
 
           MasterUserPassword: !Sub
             - '{{resolve:secretsmanager:${Secret}:SecretString:password}}'
-            - Secret:
+            - Secret: !Ref
                 Fn::Sub: '${DBName}DatabaseSecret'
-
+                
           DBSubnetGroupName: !Ref
             Fn::Sub: '${DBName}DatabaseSubnetGroup'
 
@@ -149,7 +149,7 @@ Resources:
           PubliclyAccessible: false
           BackupRetentionPeriod: !Ref DBBackupRetentionDays
           CopyTagsToSnapshot: true
-          MultiAZ: !Ref DBMultiAZ
+          MultiAZ: !Ref PostgresDBMultiAZ
           AutoMinorVersionUpgrade: true
           DeletionProtection: false
           
@@ -165,7 +165,7 @@ Outputs:
 
   'Fn::ForEach::RDSDatabaseOutputs':
     - DBName
-    - !Ref Databases
+    - !Ref PostgresDataBases
     - '${DBName}DatabaseEndpoint':
         Description: !Sub '${DBName} API PostgreSQL endpoint.'
         Value: !GetAtt
