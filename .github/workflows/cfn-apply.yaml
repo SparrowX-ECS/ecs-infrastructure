@@ -42,11 +42,11 @@ jobs:
           filters: |
             dev:
               - 'cloudformation/modules/**'
-              - '/environments/dev/**'
+              - 'environments/dev/**'
               - 'scripts/cfn-apply.sh'
               - '.github/workflows/cfn-apply.yaml'
             prod:
-              - '/environments/prod/**'
+              - 'environments/prod/**'
 
   # ============================================================
   # Common validation

@@ -26,7 +26,7 @@ LoadBalancer:
   Scheme: internet-facing
 
 ECS:
-  Mode: disabled
+  Mode: enabled
 
 ECR:
   Mode: enabled
