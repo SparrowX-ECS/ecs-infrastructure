@@ -341,7 +341,7 @@ Resources:
   EcsExecPolicy:
     Type: AWS::IAM::Policy
     Properties:
-      PolicyName: !Sub '${ProjectName}-${EnvironmentName} ${ServiceName}-ecs-exec'
+      PolicyName: !Sub '${ProjectName}-${EnvironmentName}-${ServiceName}-ecs-exec'
       Roles:
         - !Ref TaskRole
       PolicyDocument:
