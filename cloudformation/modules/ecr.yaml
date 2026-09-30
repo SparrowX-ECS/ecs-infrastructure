@@ -32,7 +32,7 @@ Resources:
     - '${ECRRepoName}Repository':
         Type: AWS::ECR::Repository
         Properties:
-          RepositoryName: !Sub '${ProjectName}-${EnvironmentName}-${ECRRepoName}'
+          RepositoryName: !Sub '${ProjectName}/${EnvironmentName}/${ECRRepoName}'
           ImageScanningConfiguration:
             ScanOnPush: true
           ImageTagMutability: IMMUTABLE
