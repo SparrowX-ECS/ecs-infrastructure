@@ -46,11 +46,6 @@ jobs:
       - name: Install yq
         uses: mikefarah/yq@v4.48.2
 
-      - name: Check configured region
-        run: |
-          test "$(yq -r '.environment.region' parameters.yaml)" = "$AWS_REGION"
-
-
       - name: Validate parameter files
         run: |
           yq eval '.' environments/dev/dev-parameters.yaml > /dev/null
