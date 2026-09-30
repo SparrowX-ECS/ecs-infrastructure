@@ -7,49 +7,58 @@ Parameters:
 
   EnvironmentName:
     Type: String
+    Description: Deployment environment. Must be either dev or prod.
+    AllowedValues:
+      - dev
+      - prod
+
+  ProjectName:
+    Type: String
+    Description: Project name used for resource naming.
     Default: sparrowx
-    Description: Environment name used for resource naming.
 
 Resources:
 
-  # ============================================================
-  # Shared ECS task security group
-  # ============================================================
+# ============================================================
+# Shared ECS task security group
+# ============================================================
 
   EcsServiceSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Allow private communication between ECS services.
       VpcId:
-        Fn::ImportValue: !Sub '${EnvironmentName}-VpcId'
+        Fn::ImportValue: !Sub '${ProjectName}-${EnvironmentName}-VpcId'
       SecurityGroupEgress:
         - Description: Allow ECS task egress.
           IpProtocol: -1
           CidrIp: 0.0.0.0/0
       Tags:
         - Key: Name
-          Value: !Sub '${EnvironmentName}-ecs-services-sg'
+          Value: !Sub '${ProjectName}-${EnvironmentName}-ecs-services-sg'
         - Key: Environment
           Value: !Ref EnvironmentName
+        - Key: Project
+          Value: !Ref ProjectName
 
   EcsServiceSecurityGroupIngress:
     Type: AWS::EC2::SecurityGroupIngress
     Properties:
       GroupId: !Ref EcsServiceSecurityGroup
       IpProtocol: tcp
-      FromPort: 8000
-      ToPort: 8000
+      FromPort: 1
+      ToPort: 65535
       SourceSecurityGroupId: !Ref EcsServiceSecurityGroup
-      Description: Allow Service Connect traffic between ECS tasks.
+      Description: Allow TCP communication between ECS services.
 
-  # ============================================================
-  # ECS Cluster
-  # ============================================================
+# ============================================================
+# ECS Cluster
+# ============================================================
 
   EcsCluster:
     Type: AWS::ECS::Cluster
     Properties:
-      ClusterName: !Sub '${EnvironmentName}-cluster'
+      ClusterName: !Sub '${ProjectName}-${EnvironmentName}-cluster'
 
       ServiceConnectDefaults:
         Namespace: !GetAtt ServiceDiscoveryNamespace.Arn
@@ -60,17 +69,19 @@ Resources:
 
       Tags:
         - Key: Name
-          Value: !Sub '${EnvironmentName}-cluster'
+          Value: !Sub '${ProjectName}-${EnvironmentName}-cluster'
         - Key: Environment
           Value: !Ref EnvironmentName
+        - Key: Project
+          Value: !Ref ProjectName
 
   ServiceDiscoveryNamespace:
     Type: AWS::ServiceDiscovery::PrivateDnsNamespace
     Properties:
-      Name: !Sub '${EnvironmentName}.local'
+      Name: !Sub '${ProjectName}-${EnvironmentName}.local'
       Vpc:
-        Fn::ImportValue: !Sub '${EnvironmentName}-VpcId'
-      Description: !Sub 'Private ECS service discovery namespace for ${EnvironmentName}.'
+        Fn::ImportValue: !Sub '${ProjectName}-${EnvironmentName}-VpcId'
+      Description: !Sub 'Private ECS service discovery namespace for ${ProjectName}-${EnvironmentName}.'
 
 
 # ==============================================================
@@ -83,16 +94,16 @@ Outputs:
     Description: Name of the ECS cluster.
     Value: !Ref EcsCluster
     Export:
-      Name: !Sub '${EnvironmentName}-EcsClusterName'
+      Name: !Sub '${ProjectName}-${EnvironmentName}-EcsClusterName'
 
   EcsClusterArn:
     Description: ARN of the ECS cluster.
     Value: !GetAtt EcsCluster.Arn
     Export:
-      Name: !Sub '${EnvironmentName}-EcsClusterArn'
+      Name: !Sub '${ProjectName}-${EnvironmentName}-EcsClusterArn'
 
   EcsServiceSecurityGroupId:
     Description: Shared security group ID for ECS task-to-task traffic.
     Value: !Ref EcsServiceSecurityGroup
     Export:
-      Name: !Sub '${EnvironmentName}-EcsServiceSecurityGroupId'
+      Name: !Sub '${ProjectName}-${EnvironmentName}-EcsServiceSecurityGroupId'

@@ -7,8 +7,15 @@ Parameters:
 
   EnvironmentName:
     Type: String
+    Description: Deployment environment. Must be either dev or prod.
+    AllowedValues:
+      - dev
+      - prod
+
+  ProjectName:
+    Type: String
+    Description: Project name used for resource naming.
     Default: sparrowx
-    Description: Environment name used for resource naming.
 
   Scheme:
     Type: String
@@ -29,7 +36,7 @@ Resources:
     Properties:
       GroupDescription: Allow public HTTP traffic to the application load balancer.
       VpcId:
-        Fn::ImportValue: !Sub '${EnvironmentName}-VpcId'
+        Fn::ImportValue: !Sub '${ProjectName}-${EnvironmentName}-VpcId'
 
       SecurityGroupIngress:
 
@@ -41,15 +48,17 @@ Resources:
 
       SecurityGroupEgress:
 
-        - Description: Allow ALB to reach ECS services.
+        - Description: Allow outbound traffic.
           IpProtocol: -1
           CidrIp: 0.0.0.0/0
 
       Tags:
         - Key: Name
-          Value: !Sub '${EnvironmentName}-alb-sg'
+          Value: !Sub '${ProjectName}-${EnvironmentName}-alb-sg'
         - Key: Environment
           Value: !Ref EnvironmentName
+        - Key: Project
+          Value: !Ref ProjectName
 
 
   # ============================================================
@@ -59,7 +68,7 @@ Resources:
   ApplicationLoadBalancer:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties:
-      Name: !Sub '${EnvironmentName}-alb'
+      Name: !Sub '${ProjectName}-${EnvironmentName}-alb'
 
       Scheme: !Ref Scheme
       Type: application
@@ -69,14 +78,17 @@ Resources:
         - !Ref AlbSecurityGroup
 
       Subnets:
-        - Fn::ImportValue: !Sub '${EnvironmentName}-PublicSubnetA'
-        - Fn::ImportValue: !Sub '${EnvironmentName}-PublicSubnetB'
+        - Fn::ImportValue: !Sub '${ProjectName}-${EnvironmentName}-PublicSubnetA'
+        - Fn::ImportValue: !Sub '${ProjectName}-${EnvironmentName}-PublicSubnetB'
+        - Fn::ImportValue: !Sub '${ProjectName}-${EnvironmentName}-PublicSubnetC'
 
       Tags:
         - Key: Name
-          Value: !Sub '${EnvironmentName}-alb'
+          Value: !Sub '${ProjectName}-${EnvironmentName}-alb'
         - Key: Environment
           Value: !Ref EnvironmentName
+        - Key: Project
+          Value: !Ref ProjectName
 
 
   # ============================================================
@@ -99,7 +111,6 @@ Resources:
             MessageBody: >
               Route not found.
 
-
 # ==============================================================
 # Outputs
 # ==============================================================
@@ -110,32 +121,32 @@ Outputs:
     Description: ARN of the Application Load Balancer.
     Value: !Ref ApplicationLoadBalancer
     Export:
-      Name: !Sub '${EnvironmentName}-AlbArn'
+      Name: !Sub '${ProjectName}-${EnvironmentName}-AlbArn'
 
 
   LoadBalancerDnsName:
     Description: DNS name of the Application Load Balancer.
     Value: !GetAtt ApplicationLoadBalancer.DNSName
     Export:
-      Name: !Sub '${EnvironmentName}-AlbDnsName'
+      Name: !Sub '${ProjectName}-${EnvironmentName}-AlbDnsName'
 
 
   LoadBalancerHostedZoneId:
     Description: Canonical hosted zone ID of the Application Load Balancer.
     Value: !GetAtt ApplicationLoadBalancer.CanonicalHostedZoneID
     Export:
-      Name: !Sub '${EnvironmentName}-AlbHostedZoneId'
+      Name: !Sub '${ProjectName}-${EnvironmentName}-AlbHostedZoneId'
 
 
   LoadBalancerSecurityGroupId:
     Description: Security group ID of the Application Load Balancer.
     Value: !Ref AlbSecurityGroup
     Export:
-      Name: !Sub '${EnvironmentName}-AlbSecurityGroupId'
+      Name: !Sub '${ProjectName}-${EnvironmentName}-AlbSecurityGroupId'
 
 
   HttpListenerArn:
     Description: ARN of the HTTP listener.
     Value: !Ref HttpListener
     Export:
-      Name: !Sub '${EnvironmentName}-AlbHttpListenerArn'
+      Name: !Sub '${ProjectName}-${EnvironmentName}-AlbHttpListenerArn'

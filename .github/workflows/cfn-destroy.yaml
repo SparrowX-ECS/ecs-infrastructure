@@ -3,6 +3,14 @@ name: CFN Destroy
 on:
   workflow_dispatch:
     inputs:
+      environment:
+        description: Environment to destroy
+        required: true
+        type: choice
+        options:
+          - dev
+          - prod
+
       confirmation:
         description: Type DESTROY to confirm full environment clean-up
         required: true
@@ -13,50 +21,87 @@ permissions:
   id-token: write
 
 env:
-  AWS_REGION: eu-west-1
+  AWS_REGION: ${{ vars.AWS_REGION }}
 
 jobs:
-  destroy:
-    name: Destroy Infrastructure
-    if: github.event.inputs.confirmation == 'DESTROY'
+
+  # ============================================================
+  # Destroy Dev
+  # ============================================================
+  destroy-dev:
+    name: Destroy Dev
+    if: inputs.environment == 'dev' && inputs.confirmation == 'DESTROY'
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install yq
-        uses: mikefarah/yq@v4.48.2
-
-      - name: Check configured region
-        run: test "$(yq -r '.environment.region' parameters.yaml)" = "$AWS_REGION"
-
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/cloudformation-github-actions
-          aws-region: eu-west-1
+          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/${{ vars.AWS_ROLE_NAME }}
+          aws-region: ${{ vars.AWS_REGION }}
 
       - name: Verify AWS identity
         run: aws sts get-caller-identity
 
-      - name: Destroy CloudFormation stacks
-        env:
-          CONFIRM_DESTROY: ${{ github.event.inputs.confirmation }}
+      - name: Destroy Dev
         run: |
           set -o pipefail
-          ./scripts/cfn-destroy.sh 2>&1 | tee cfn-destroy-output.txt
+          ./scripts/cfn-destroy.sh dev 2>&1 | tee cfn-destroy-dev-output.txt
 
       - name: Add to summary
         if: always()
         run: |
           {
-            echo '## CloudFormation destroy'
+            echo '## CloudFormation destroy — Dev'
             echo '```text'
-            if [ -f cfn-destroy-output.txt ]; then
-              tail -n 120 cfn-destroy-output.txt
+            if [ -f cfn-destroy-dev-output.txt ]; then
+              tail -n 120 cfn-destroy-dev-output.txt
             else
-              echo 'The destroy did not start; inspect the workflow logs.'
+              echo 'The Dev destroy did not start; inspect the workflow logs.'
+            fi
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+
+  # ============================================================
+  # Destroy Prod
+  # ============================================================
+  destroy-prod:
+    name: Destroy Prod
+    if: inputs.environment == 'prod' && inputs.confirmation == 'DESTROY'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/${{ vars.AWS_ROLE_NAME }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Verify AWS identity
+        run: aws sts get-caller-identity
+
+      - name: Destroy Prod
+        run: |
+          set -o pipefail
+          ./scripts/cfn-destroy.sh prod 2>&1 | tee cfn-destroy-prod-output.txt
+
+      - name: Add to summary
+        if: always()
+        run: |
+          {
+            echo '## CloudFormation destroy — Prod'
+            echo '```text'
+            if [ -f cfn-destroy-prod-output.txt ]; then
+              tail -n 120 cfn-destroy-prod-output.txt
+            else
+              echo 'The Prod destroy did not start; inspect the workflow logs.'
             fi
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"

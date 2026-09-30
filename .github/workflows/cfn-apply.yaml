@@ -6,17 +6,23 @@ on:
       - main
     paths:
       - 'cloudformation/**'
-      - 'parameters.yaml'
-      - 'scripts/**'
-      - '.github/workflows/**'
+      - 'environments/**'
+      - 'scripts/cfn-apply.sh'
+      - '.github/workflows/cfn-apply.yaml'
 
 permissions:
   contents: read
 
 env:
-  AWS_REGION: eu-west-1
+  AWS_REGION: ${{ vars.AWS_REGION }}
+  CLOUDFORMATION_ARTIFACT_BUCKET: ${{ vars.CLOUDFORMATION_ARTIFACT_BUCKET }}
+
 
 jobs:
+
+  # ============================================================
+  # Common validation
+  # ============================================================
   validate:
     name: Validate CloudFormation
     runs-on: ubuntu-latest
@@ -37,25 +43,44 @@ jobs:
       - name: Install cfn-lint
         run: pip install cfn-lint
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/cloudformation-github-actions
-          aws-region: eu-west-1
+      - name: Install yq
+        uses: mikefarah/yq@v4.48.2
 
-      - name: Run cfn-lint
-        run: cfn-lint cloudformation/*.yaml
-
-      - name: Validate CloudFormation templates
+      - name: Check configured region
         run: |
-          for template in cloudformation/*.yaml; do
-            aws cloudformation validate-template \
-              --template-body file://"$template"
-          done
+          test "$(yq -r '.environment.region' parameters.yaml)" = "$AWS_REGION"
 
-  apply:
-    name: Apply Infrastructure
+
+      - name: Validate parameter files
+        run: |
+          yq eval '.' environments/dev/dev-parameters.yaml > /dev/null
+          yq eval '.' environments/prod/prod-parameters.yaml > /dev/null
+
+      - name: Validate CloudFormation syntax
+        run: |
+          cfn-lint \
+            -i W3002 W1030 \
+            -- \
+            cloudformation/*.yaml \
+            cloudformation/modules/*.yaml \
+            environments/dev/dev-stack.yaml \
+            environments/prod/prod-stack.yaml
+
+
+  # ============================================================
+  # Development
+  # ============================================================
+  deploy-dev:
+    name: Deploy Dev
     needs: validate
+    if: |
+      contains(github.event.head_commit.modified, 'cloudformation/modules/') ||
+      contains(github.event.head_commit.added, 'cloudformation/modules/') ||
+      contains(github.event.head_commit.modified, 'environments/dev/') ||
+      contains(github.event.head_commit.added, 'environments/dev/') ||
+      contains(github.event.head_commit.modified, 'scripts/cfn-apply.sh') ||
+      contains(github.event.head_commit.modified, '.github/workflows/cfn-apply.yaml') 
+
     runs-on: ubuntu-latest
 
     permissions:
@@ -69,33 +94,93 @@ jobs:
       - name: Install yq
         uses: mikefarah/yq@v4.48.2
 
-      - name: Check configured region
-        run: test "$(yq -r '.environment.region' parameters.yaml)" = "$AWS_REGION"
-
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/cloudformation-github-actions
-          aws-region: eu-west-1
+          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/${{ vars.AWS_ROLE_NAME }}
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Verify AWS identity
         run: aws sts get-caller-identity
 
-      - name: Apply CloudFormation stacks
+      - name: Check dev root stack
+        run: |
+          aws cloudformation describe-stacks \
+            --stack-name sparrowx-dev-root-stack \
+            --region "$AWS_REGION"
+
+      - name: Apply Dev CloudFormation
         run: |
           set -o pipefail
-          ./scripts/cfn-apply.sh 2>&1 | tee cfn-apply-output.txt
+          ./scripts/cfn-apply.sh dev 2>&1 | tee cfn-apply-dev-output.txt
 
       - name: Add to summary
         if: always()
         run: |
           {
-            echo '## CloudFormation apply'
+            echo '## CloudFormation apply — dev'
             echo '```text'
-            if [ -f cfn-apply-output.txt ]; then
-              tail -n 120 cfn-apply-output.txt
+            if [ -f cfn-apply-dev-output.txt ]; then
+              tail -n 120 cfn-apply-dev-output.txt
             else
-              echo 'The apply did not start; inspect the workflow logs.'
+              echo 'The dev apply did not start; inspect the workflow logs.'
+            fi
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+
+  # ============================================================
+  # Production
+  # ============================================================
+  deploy-prod:
+    name: Deploy Prod
+    needs: validate
+    if: |
+      contains(github.event.head_commit.modified, 'environments/prod/') ||
+      contains(github.event.head_commit.added, 'environments/prod/')
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install yq
+        uses: mikefarah/yq@v4.48.2
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/${{ vars.AWS_ROLE_NAME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Verify AWS identity
+        run: aws sts get-caller-identity
+
+      - name: Check prod root stack
+        run: |
+          aws cloudformation describe-stacks \
+            --stack-name sparrowx-prod-root-stack \
+            --region "$AWS_REGION"
+
+      - name: Apply Prod CloudFormation
+        run: |
+          set -o pipefail
+          ./scripts/cfn-apply.sh prod 2>&1 | tee cfn-apply-prod-output.txt
+
+      - name: Add to summary
+        if: always()
+        run: |
+          {
+            echo '## CloudFormation apply — prod'
+            echo '```text'
+            if [ -f cfn-apply-prod-output.txt ]; then
+              tail -n 120 cfn-apply-prod-output.txt
+            else
+              echo 'The prod apply did not start; inspect the workflow logs.'
             fi
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"

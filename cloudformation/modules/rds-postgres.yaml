@@ -1,0 +1,198 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Transform:
+  - AWS::LanguageExtensions
+
+Description: >
+  PostgreSQL databases for SparrowX ECS services.
+
+Parameters:
+
+  EnvironmentName:
+    Type: String
+    Default: sparrowx
+    Description: Environment name used for resource naming.
+
+  ProjectName:
+    Type: String
+    Description: Project name used for resource naming.
+    Default: sparrowx
+
+  PostgresDBInstancesClass:
+    Type: String
+    Default: db.t4g.micro
+    Description: Smallest practical PostgreSQL RDS instance class for this project.
+
+  PostgresDBAllocatedStorage:
+    Type: Number
+    Default: 20
+    Description: Allocated storage in GiB.
+
+  PostgresDBEngineVersion:
+    Type: String
+    Default: '16'
+    Description: PostgreSQL major engine version.
+
+  DBBackupRetentionDays:
+    Type: Number
+    Default: 1
+    MinValue: 0
+    MaxValue: 35
+    Description: Number of days to retain automated backups.
+
+  PostgresDBMultiAZ:
+    Type: String
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Whether to deploy each database in multiple Availability Zones.
+
+  PostgresDataBases:
+    Type: CommaDelimitedList
+    Description: >
+      Comma-separated list of Postgres database names to be created. Only lowercase letters and numbers are allowed. Naming convention example: customerdb, taskdb 
+
+Resources:
+
+  # ============================================================
+  # RDS Postgres Databases
+  # ============================================================
+  'Fn::ForEach::RDSDatabases':
+    - DBName
+    - !Ref PostgresDataBases
+    - '${DBName}DatabaseSecurityGroup':
+        Type: AWS::EC2::SecurityGroup
+        Properties:
+          GroupDescription: !Sub 'Security Group for Postgres access for ${ProjectName}-${EnvironmentName} ${DBName}.'
+          VpcId:
+            Fn::ImportValue: !Sub '${ProjectName}-${EnvironmentName}-VpcId'
+          
+          Tags:
+            - Key: Name
+              Value: !Sub '${ProjectName}-${EnvironmentName}-${DBName}-sg'
+            - Key: Project
+              Value: !Ref ProjectName
+            - Key: Environment
+              Value: !Ref EnvironmentName
+      
+      '${DBName}DatabaseSecret':
+        Type: AWS::SecretsManager::Secret
+        Properties:
+          Name: !Sub '${ProjectName}-${EnvironmentName}/${DBName}/creds'
+          Description: !Sub 'PostgreSQL credentials for ${ProjectName}-${EnvironmentName} ${DBName}.'
+          GenerateSecretString:
+            SecretStringTemplate: |
+              {
+                "username": "postgres_admin"
+              }
+            GenerateStringKey: password
+            PasswordLength: 32
+            ExcludeCharacters: '"@/\'
+          
+          Tags:
+            - Key: Name
+              Value: !Sub '${ProjectName}-${EnvironmentName}-${DBName}-secret'
+            - Key: Project
+              Value: !Ref ProjectName
+            - Key: Environment
+              Value: !Ref EnvironmentName
+      
+      '${DBName}DatabaseSubnetGroup':
+        Type: AWS::RDS::DBSubnetGroup
+        Properties:
+          DBSubnetGroupDescription: !Sub 'Private subnets for ${EnvironmentName} ${DBName} database.'
+          SubnetIds:
+            - Fn::ImportValue: !Sub '${ProjectName}-${EnvironmentName}-PrivateSubnetA'
+            - Fn::ImportValue: !Sub '${ProjectName}-${EnvironmentName}-PrivateSubnetB'
+            - Fn::ImportValue: !Sub '${ProjectName}-${EnvironmentName}-PrivateSubnetC'
+          
+          Tags:
+            - Key: Name
+              Value: !Sub '${ProjectName}-${EnvironmentName}-${DBName}-subnet-group'
+            - Key: Project
+              Value: !Ref ProjectName
+            - Key: Environment
+              Value: !Ref EnvironmentName
+      
+      '${DBName}Database':
+        Type: AWS::RDS::DBInstance
+        DeletionPolicy: Snapshot
+        UpdateReplacePolicy: Snapshot
+        Properties:
+          DBInstanceIdentifier: !Sub '${ProjectName}-${EnvironmentName}-${DBName}'
+          Engine: postgres
+          EngineVersion: !Ref PostgresDBEngineVersion
+          DBInstanceClass: !Ref PostgresDBInstancesClass
+          AllocatedStorage: !Ref PostgresDBAllocatedStorage
+          StorageType: gp3
+          StorageEncrypted: true
+          DBName: !Sub '${DBName}'
+          
+          MasterUsername: !Sub
+            - '{{resolve:secretsmanager:${Secret}:SecretString:username}}'
+            - Secret: !Ref
+                Fn::Sub: '${DBName}DatabaseSecret'
+
+          MasterUserPassword: !Sub
+            - '{{resolve:secretsmanager:${Secret}:SecretString:password}}'
+            - Secret: !Ref
+                Fn::Sub: '${DBName}DatabaseSecret'
+                
+          DBSubnetGroupName: !Ref
+            Fn::Sub: '${DBName}DatabaseSubnetGroup'
+
+          VPCSecurityGroups:
+            - !Ref
+              Fn::Sub: '${DBName}DatabaseSecurityGroup'
+
+          PubliclyAccessible: false
+          BackupRetentionPeriod: !Ref DBBackupRetentionDays
+          CopyTagsToSnapshot: true
+          MultiAZ: !Ref PostgresDBMultiAZ
+          AutoMinorVersionUpgrade: true
+          DeletionProtection: false
+          
+          Tags:
+            - Key: Name
+              Value: !Sub '${ProjectName}-${EnvironmentName}-${DBName}'
+            - Key: Project
+              Value: !Ref ProjectName
+            - Key: Environment
+              Value: !Ref EnvironmentName
+
+Outputs:
+
+  'Fn::ForEach::RDSDatabaseOutputs':
+    - DBName
+    - !Ref PostgresDataBases
+    - '${DBName}DatabaseEndpoint':
+        Description: !Sub '${DBName} API PostgreSQL endpoint.'
+        Value: !GetAtt
+          - !Sub '${DBName}Database'
+          - Endpoint.Address
+        Export:
+          Name: !Sub '${ProjectName}-${EnvironmentName}-${DBName}DatabaseEndpoint'
+
+      '${DBName}DatabasePort':
+        Description: !Sub '${DBName} API PostgreSQL port.'
+        Value: !GetAtt
+          - !Sub '${DBName}Database'
+          - Endpoint.Port
+        Export:
+          Name: !Sub '${ProjectName}-${EnvironmentName}-${DBName}DatabasePort'
+
+      '${DBName}DatabaseSecretArn':
+        Description: !Sub '${DBName} API database credentials secret ARN.'
+        Value: !Ref
+          Fn::Sub: '${DBName}DatabaseSecret'
+        Export:
+          Name: !Sub '${ProjectName}-${EnvironmentName}-${DBName}DatabaseSecretArn'
+
+      '${DBName}DatabaseSecurityGroupId':
+        Description: !Sub '${DBName} API database security group ID.'
+        Value: !Ref
+          Fn::Sub: '${DBName}DatabaseSecurityGroup'
+        Export:
+          Name: !Sub '${ProjectName}-${EnvironmentName}-${DBName}DatabaseSecurityGroupId'
+      
