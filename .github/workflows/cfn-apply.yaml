@@ -19,6 +19,39 @@ env:
 
 
 jobs:
+  # ============================================================
+  # Detecting Repo Changes
+  # ============================================================
+  changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+
+    outputs:
+      code: ${{ steps.filter.outputs.dev }}
+      deploy: ${{ steps.filter.outputs.prod }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Detect changed files
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+
+        # Trigger Automated Dev Deployment For Any Infrastructure Level Changes (Modules Or Dev Specific) Or Workflow Changes
+            
+            dev:
+              - 'cloudformation/modules/**'
+              - '/environments/dev/**'
+              - 'scripts/cfn-apply.sh'
+              - '.github/workflows/cfn-apply.yaml'
+
+        # Trigger Automated Prod Deployment For Prod Specific Changes Only
+ 
+            prod:
+              - '/environments/prod/**'
 
   # ============================================================
   # Common validation
@@ -69,12 +102,7 @@ jobs:
     name: Deploy Dev
     needs: validate
     if: |
-      contains(github.event.head_commit.modified, 'cloudformation/modules/') ||
-      contains(github.event.head_commit.added, 'cloudformation/modules/') ||
-      contains(github.event.head_commit.modified, 'environments/dev/') ||
-      contains(github.event.head_commit.added, 'environments/dev/') ||
-      contains(github.event.head_commit.modified, 'scripts/cfn-apply.sh') ||
-      contains(github.event.head_commit.modified, '.github/workflows/cfn-apply.yaml') 
+      needs.changes.outputs.dev == 'true'
 
     runs-on: ubuntu-latest
 
@@ -125,8 +153,7 @@ jobs:
     name: Deploy Prod
     needs: validate
     if: |
-      contains(github.event.head_commit.modified, 'environments/prod/') ||
-      contains(github.event.head_commit.added, 'environments/prod/')
+      needs.changes.outputs.prod == 'true'
     runs-on: ubuntu-latest
 
     permissions:
