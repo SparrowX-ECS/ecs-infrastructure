@@ -565,8 +565,7 @@ Resources:
               - /*
       Actions:
         - Type: forward
-          TargetGroupArn: 
-            Fn::ImportValue: !Ref TargetGroup
+          TargetGroupArn: !Ref TargetGroup
 
   # ============================================================
   # ECS Fargate Service
