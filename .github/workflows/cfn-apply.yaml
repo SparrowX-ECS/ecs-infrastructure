@@ -95,7 +95,9 @@ jobs:
   # ============================================================
   deploy-dev:
     name: Deploy Dev
-    needs: validate
+    needs: 
+      - validate
+      - changes
     if: |
       needs.changes.outputs.dev == 'true'
 
@@ -146,7 +148,9 @@ jobs:
   # ============================================================
   deploy-prod:
     name: Deploy Prod
-    needs: validate
+    needs: 
+      - validate
+      - changes
     if: |
       needs.changes.outputs.prod == 'true'
     runs-on: ubuntu-latest
