@@ -54,12 +54,6 @@ jobs:
       - name: Verify AWS identity
         run: aws sts get-caller-identity
 
-      - name: Check dev root stack
-        run: |
-          aws cloudformation describe-stacks \
-            --stack-name sparrowx-dev-root-stack \
-            --region "$AWS_REGION"
-
       - name: Apply Dev CloudFormation
         run: |
           set -o pipefail
@@ -107,12 +101,6 @@ jobs:
 
       - name: Verify AWS identity
         run: aws sts get-caller-identity
-
-      - name: Check prod root stack
-        run: |
-          aws cloudformation describe-stacks \
-            --stack-name sparrowx-prod-root-stack \
-            --region "$AWS_REGION"
 
       - name: Apply Prod CloudFormation
         run: |
