@@ -1,0 +1,134 @@
+name: Trigger Manual Sync
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Environment Target for deployment
+        required: true
+        type: choice
+        options:
+          - dev
+          - prod
+
+      confirmation:
+        description: Type 'MANUAL_SYNC' to confirm triggering deployment for the selected environment
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION }}
+  CLOUDFORMATION_ARTIFACT_BUCKET: ${{ vars.CLOUDFORMATION_ARTIFACT_BUCKET }}
+
+jobs:
+
+  # ============================================================
+  # Development
+  # ============================================================
+  manual-sync-dev:
+    name: Manual Sync Dev
+    if: inputs.environment == 'dev' && inputs.confirmation == 'MANUAL_SYNC'
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install yq
+        uses: mikefarah/yq@v4.48.2
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/${{ vars.AWS_ROLE_NAME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Verify AWS identity
+        run: aws sts get-caller-identity
+
+      - name: Check dev root stack
+        run: |
+          aws cloudformation describe-stacks \
+            --stack-name sparrowx-dev-root-stack \
+            --region "$AWS_REGION"
+
+      - name: Apply Dev CloudFormation
+        run: |
+          set -o pipefail
+          ./scripts/cfn-apply.sh dev 2>&1 | tee cfn-apply-dev-output.txt
+
+      - name: Add to summary
+        if: always()
+        run: |
+          {
+            echo '## CloudFormation apply — dev'
+            echo '```text'
+            if [ -f cfn-apply-dev-output.txt ]; then
+              tail -n 120 cfn-apply-dev-output.txt
+            else
+              echo 'The dev apply did not start; inspect the workflow logs.'
+            fi
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+
+  # ============================================================
+  # Production
+  # ============================================================
+  manual-sync-prod:
+    name: Manual Sync Prod
+    if: inputs.environment == 'prod' && inputs.confirmation == 'MANUAL_SYNC'
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install yq
+        uses: mikefarah/yq@v4.48.2
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/${{ vars.AWS_ROLE_NAME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Verify AWS identity
+        run: aws sts get-caller-identity
+
+      - name: Check prod root stack
+        run: |
+          aws cloudformation describe-stacks \
+            --stack-name sparrowx-prod-root-stack \
+            --region "$AWS_REGION"
+
+      - name: Apply Prod CloudFormation
+        run: |
+          set -o pipefail
+          ./scripts/cfn-apply.sh prod 2>&1 | tee cfn-apply-prod-output.txt
+
+      - name: Add to summary
+        if: always()
+        run: |
+          {
+            echo '## CloudFormation apply — prod'
+            echo '```text'
+            if [ -f cfn-apply-prod-output.txt ]; then
+              tail -n 120 cfn-apply-prod-output.txt
+            else
+              echo 'The prod apply did not start; inspect the workflow logs.'
+            fi
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
