@@ -27,8 +27,8 @@ jobs:
     runs-on: ubuntu-latest
 
     outputs:
-      code: ${{ steps.filter.outputs.dev }}
-      deploy: ${{ steps.filter.outputs.prod }}
+      dev: ${{ steps.filter.outputs.dev }}
+      prod: ${{ steps.filter.outputs.prod }}
 
     steps:
       - name: Checkout
