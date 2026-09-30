@@ -33,23 +33,18 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
+      # Trigger Automated Dev Deployment For Any Infrastructure Level Changes (Modules Or Dev Specific) Or Workflow Changes
+      # Trigger Automated Prod Deployment For Prod Specific Changes Only
       - name: Detect changed files
         uses: dorny/paths-filter@v3
         id: filter
         with:
           filters: |
-
-        # Trigger Automated Dev Deployment For Any Infrastructure Level Changes (Modules Or Dev Specific) Or Workflow Changes
-            
             dev:
               - 'cloudformation/modules/**'
               - '/environments/dev/**'
               - 'scripts/cfn-apply.sh'
               - '.github/workflows/cfn-apply.yaml'
-
-        # Trigger Automated Prod Deployment For Prod Specific Changes Only
- 
             prod:
               - '/environments/prod/**'
 
