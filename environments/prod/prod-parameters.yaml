@@ -29,7 +29,7 @@ ECS:
   Mode: disabled
 
 ECR:
-  Mode: disabled
+  Mode: enabled
   Repositories:
     - customerapi
     - taskapi
