@@ -28,9 +28,9 @@ Parameters:
     Type: String
     Description: Name of the application service.
 
-  ECRRepoName:
+  ECRRepoFullName:
     Type: String
-    Description: Name of the ECR repository.
+    Description: Full Name of the ECR repository "nameSpace/repoName".
 
   FrontendServiceName:
     Type: String
@@ -388,7 +388,7 @@ Resources:
 
         - Name: !Ref ServiceName
 
-          Image: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ProjectName}-${EnvironmentName}-${ECRRepoName}:${ImageTag}'
+          Image: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ECRRepoFullName}:${ImageTag}'
 
           Essential: true
 
