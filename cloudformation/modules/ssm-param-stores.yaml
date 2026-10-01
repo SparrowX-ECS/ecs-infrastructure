@@ -1,0 +1,64 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Transform:
+  - AWS::LanguageExtensions
+
+Description: >
+  Creates deployment-state SSM parameters for SparrowX services.
+
+Parameters:
+
+  ProjectName:
+    Type: String
+    Default: sparrowx
+
+  Services:
+    Type: CommaDelimitedList
+    Description: List of SparrowX service names
+
+Resources:
+
+  # ============================================================
+  # DEV - Last Successfully Deployed Image
+  # ============================================================
+
+  'Fn::ForEach::DevDeployedParameters':
+    - Service
+    - !Ref Services
+    - '${Service}DevDeployedImage':
+        Type: AWS::SSM::Parameter
+        Properties:
+          Name: !Sub '/${ProjectName}/services/${Service}/dev/deployed'
+          Type: String
+          Value: '{}'
+          Description: !Sub 'Last successfully deployed image for ${Service} in DEV'
+
+  # ============================================================
+  # PROD - Candidate Image
+  # ============================================================
+
+  'Fn::ForEach::ProdCandidateParameters':
+    - Service
+    - !Ref Services
+    - '${Service}ProdCandidateImage':
+        Type: AWS::SSM::Parameter
+        Properties:
+          Name: !Sub '/${ProjectName}/services/${Service}/prod/candidate'
+          Type: String
+          Value: '{}'
+          Description: !Sub 'Current promotion candidate image for ${Service} in PROD'
+
+  # ============================================================
+  # PROD - Last Successfully Deployed Image
+  # ============================================================
+
+  'Fn::ForEach::ProdDeployedParameters':
+    - Service
+    - !Ref Services
+    - '${Service}ProdDeployedImage':
+        Type: AWS::SSM::Parameter
+        Properties:
+          Name: !Sub '/${ProjectName}/services/${Service}/prod/deployed'
+          Type: String
+          Value: '{}'
+          Description: !Sub 'Last successfully deployed image for ${Service} in PROD'
