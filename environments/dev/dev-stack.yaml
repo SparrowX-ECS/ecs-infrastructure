@@ -315,7 +315,7 @@ Resources:
 
       Parameters:
         ProjectName: !Ref ProjectName
-        Services: !Ref ECRRepositories
+        Services: !Join [",", !Ref ECRRepositories]
 
   # ============================================================
   # RDS Postgres DBs Nested Stack
