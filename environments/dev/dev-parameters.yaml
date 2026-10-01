@@ -18,8 +18,8 @@ Network:
 
   NatGateways:
     A: enabled
-    B: disabled
-    C: disabled
+    B: enabled
+    C: enabled
 
 LoadBalancer:
   Mode: enabled
