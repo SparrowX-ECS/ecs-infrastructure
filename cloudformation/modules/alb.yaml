@@ -111,6 +111,26 @@ Resources:
             MessageBody: >
               Route not found.
 
+# Handle API routes with a 404 response if no matching route is found.
+  ApiFallbackRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn: !Ref HttpListener
+
+      Priority: 2200
+      Conditions:
+        - Field: path-pattern
+          PathPatternConfig:
+            Values:
+              - /api/*
+      Actions:
+        - Type: fixed-response
+          FixedResponseConfig:
+            StatusCode: '404'
+            ContentType: application/json
+            MessageBody: '{"detail":"API route not found"}'
+
+
 # ==============================================================
 # Outputs
 # ==============================================================

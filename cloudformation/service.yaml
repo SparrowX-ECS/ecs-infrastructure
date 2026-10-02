@@ -529,26 +529,6 @@ Resources:
   # ALB FallbackListener Rules
   # ============================================================
 
-  # Handle API routes with a 404 response if no matching route is found.
-  ApiFallbackRule:
-    Type: AWS::ElasticLoadBalancingV2::ListenerRule
-    Properties:
-      ListenerArn:
-        Fn::ImportValue: !Sub '${ProjectName}-${EnvironmentName}-AlbHttpListenerArn'
-
-      Priority: 2200
-      Conditions:
-        - Field: path-pattern
-          PathPatternConfig:
-            Values:
-              - /api/*
-      Actions:
-        - Type: fixed-response
-          FixedResponseConfig:
-            StatusCode: '404'
-            ContentType: application/json
-            MessageBody: '{"detail":"API route not found"}'
-
   # Handle frontend routes with a 404 response if no matching route is found.
   FrontendRule:
     Type: AWS::ElasticLoadBalancingV2::ListenerRule
