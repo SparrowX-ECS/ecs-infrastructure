@@ -305,6 +305,21 @@ Resources:
         EnvironmentName: !Ref EnvironmentName
         ECRRepositories: !Join [",", !Ref ECRRepositories]
 
+
+  # ============================================================
+  # SSM Parameter Stores Nested Stack
+  # ============================================================
+  SSMParamStores:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: ../../cloudformation/modules/ssm-param-stores.yaml
+
+      Parameters:
+        ProjectName: !Ref ProjectName
+        EnvironmentName: !Ref EnvironmentName
+        Services: !Join [",", !Ref ECRRepositories]
+
+
   # ============================================================
   # RDS Postgres DBs Nested Stack
   # ============================================================

@@ -315,6 +315,7 @@ Resources:
 
       Parameters:
         ProjectName: !Ref ProjectName
+        EnvironmentName: !Ref EnvironmentName
         Services: !Join [",", !Ref ECRRepositories]
 
   # ============================================================

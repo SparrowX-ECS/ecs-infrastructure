@@ -7,6 +7,12 @@ Description: >
   Creates deployment-state SSM parameters for SparrowX services.
 
 Parameters:
+  EnvironmentName:
+    Type: String
+    Description: Environment name used for resource naming and tagging.
+    AllowedValues:
+      - dev
+      - prod
 
   ProjectName:
     Type: String
@@ -16,22 +22,25 @@ Parameters:
     Type: CommaDelimitedList
     Description: List of SparrowX service names
 
+Conditions:
+  IsDev: !Equals [!Ref EnvironmentName, dev]
+
 Resources:
 
   # ============================================================
-  # DEV - Last Successfully Deployed Image
+  # Last Successfully Deployed Image To An Environment Dev/Prod
   # ============================================================
 
-  'Fn::ForEach::DevDeployedParameters':
+  'Fn::ForEach::DeployedParameters':
     - Service
     - !Ref Services
     - '${Service}DevDeployedImage':
         Type: AWS::SSM::Parameter
         Properties:
-          Name: !Sub '/${ProjectName}/services/${Service}/dev/deployed'
+          Name: !Sub '/${ProjectName}/services/${Service}/${EnvironmentName}/deployed'
           Type: String
           Value: '{}'
-          Description: !Sub 'Last successfully deployed image for ${Service} in DEV'
+          Description: !Sub 'Last successfully deployed image for ${Service} in ${EnvironmentName}'
 
   # ============================================================
   # PROD - Candidate Image
@@ -42,23 +51,9 @@ Resources:
     - !Ref Services
     - '${Service}ProdCandidateImage':
         Type: AWS::SSM::Parameter
+        Condition: IsDev
         Properties:
           Name: !Sub '/${ProjectName}/services/${Service}/prod/candidate'
           Type: String
           Value: '{}'
           Description: !Sub 'Current promotion candidate image for ${Service} in PROD'
-
-  # ============================================================
-  # PROD - Last Successfully Deployed Image
-  # ============================================================
-
-  'Fn::ForEach::ProdDeployedParameters':
-    - Service
-    - !Ref Services
-    - '${Service}ProdDeployedImage':
-        Type: AWS::SSM::Parameter
-        Properties:
-          Name: !Sub '/${ProjectName}/services/${Service}/prod/deployed'
-          Type: String
-          Value: '{}'
-          Description: !Sub 'Last successfully deployed image for ${Service} in PROD'

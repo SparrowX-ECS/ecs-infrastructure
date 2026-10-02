@@ -10,8 +10,10 @@ Parameters:
 
   EnvironmentName:
     Type: String
-    Default: sparrowx
     Description: Environment name used for resource naming.
+    AllowedValues:
+      - dev
+      - prod
 
   ProjectName:
     Type: String

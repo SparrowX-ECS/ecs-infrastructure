@@ -17,12 +17,12 @@ Network:
     C: 10.10.6.0/24
 
   NatGateways:
-    A: disabled
+    A: enabled
     B: disabled
     C: disabled
 
 LoadBalancer:
-  Mode: disabled
+  Mode: enabled
   Scheme: internet-facing
 
 ECS:
@@ -39,7 +39,7 @@ ECR:
     - webportal
 
 PostgreSQL:
-  Mode: disabled
+  Mode: enabled
   Databases:
     - customerdb
     - taskdb
