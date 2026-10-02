@@ -18,8 +18,8 @@ Network:
 
   NatGateways:
     A: enabled
-    B: disabled
-    C: disabled
+    B: enabled
+    C: enabled
 
 LoadBalancer:
   Mode: enabled
@@ -52,6 +52,6 @@ PostgreSQL:
   EngineVersion: "16"
 
 CloudFront:
-  Mode: disabled
+  Mode: enabled
   CertificateArn: /sparrowx/cloudfront/acm-certificate-arn
   DomainName: sparrowx-prod.mo2cloud.com
