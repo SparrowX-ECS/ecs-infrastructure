@@ -95,6 +95,8 @@ jobs:
   # ============================================================
   deploy-dev:
     name: Deploy Dev
+    environment:
+      name: dev
     needs: 
       - validate
       - changes
@@ -148,6 +150,8 @@ jobs:
   # ============================================================
   deploy-prod:
     name: Deploy Prod
+    environment:
+      name: prod
     needs: 
       - validate
       - changes
