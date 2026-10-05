@@ -27,13 +27,51 @@ env:
 jobs:
 
   # ============================================================
+  # Deployment Guard
+  # ============================================================
+  deployment-guard:
+    name: Deployment Guard
+    runs-on: ubuntu-latest
+
+    outputs:
+      dev-root-stack-state: ${{ steps.root-stack-state.outputs.dev }}
+      prod-root-stack-state: ${{ steps.root-stack-state.outputs.prod }}
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install yq
+        uses: mikefarah/yq@v4.48.2
+
+      - name: Read root stack state
+        id: root-stack-state
+        run: |
+          DEV_ROOT_STACK_STATE=$(yq -r '.RootStack.State' environments/dev/dev-parameters.yaml)
+          PROD_ROOT_STACK_STATE=$(yq -r '.RootStack.State' environments/prod/prod-parameters.yaml)
+
+          echo "Dev RootStack.State: $DEV_ROOT_STACK_STATE"
+          echo "Prod RootStack.State: $PROD_ROOT_STACK_STATE"
+
+          echo "dev=$DEV_ROOT_STACK_STATE" >> "$GITHUB_OUTPUT"
+          echo "prod=$PROD_ROOT_STACK_STATE" >> "$GITHUB_OUTPUT"
+
+
+  # ============================================================
   # Development
   # ============================================================
   manual-sync-dev:
     name: Manual Sync Dev
     environment:
       name: dev
-    if: inputs.environment == 'dev' && inputs.confirmation == 'MANUAL_SYNC'
+    needs: deployment-guard
+    if: |
+      inputs.environment == 'dev' &&
+      inputs.confirmation == 'MANUAL_SYNC' &&
+      needs.deployment-guard.outputs.dev-root-stack-state == 'enabled'
     runs-on: ubuntu-latest
 
     permissions:
@@ -83,7 +121,11 @@ jobs:
     name: Manual Sync Prod
     environment:
       name: prod
-    if: inputs.environment == 'prod' && inputs.confirmation == 'MANUAL_SYNC'
+    needs: deployment-guard
+    if: |
+      inputs.environment == 'prod' &&
+      inputs.confirmation == 'MANUAL_SYNC' &&
+      needs.deployment-guard.outputs.prod-root-stack-state == 'enabled'
     runs-on: ubuntu-latest
 
     permissions:

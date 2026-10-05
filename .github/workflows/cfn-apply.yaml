@@ -8,6 +8,7 @@ on:
       - 'cloudformation/**'
       - 'environments/**'
       - 'scripts/cfn-apply.sh'
+      - 'scripts/cfn-destroy.sh'
       - '.github/workflows/cfn-apply.yaml'
 
 permissions:
@@ -29,10 +30,12 @@ jobs:
     outputs:
       dev: ${{ steps.filter.outputs.dev }}
       prod: ${{ steps.filter.outputs.prod }}
+      common: ${{ steps.filter.outputs.common }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       # Trigger Automated Dev Deployment For Any Infrastructure Level Changes (Modules Or Dev Specific) Or Workflow Changes
       # Trigger Automated Prod Deployment For Prod Specific Changes Only
       - name: Detect changed files
@@ -41,12 +44,47 @@ jobs:
         with:
           filters: |
             dev:
-              - 'cloudformation/modules/**'
               - 'environments/dev/**'
-              - 'scripts/cfn-apply.sh'
-              - '.github/workflows/cfn-apply.yaml'
             prod:
               - 'environments/prod/**'
+            common:
+              - 'cloudformation/modules/**'
+              - 'scripts/cfn-apply.sh'
+              - 'scripts/cfn-destroy.sh'
+              - '.github/workflows/cfn-apply.yaml'
+
+  # ============================================================
+  # Deployment Guard
+  # ============================================================
+  deployment-guard:
+    name: Deployment Guard
+    runs-on: ubuntu-latest
+
+    outputs:
+      dev-root-stack-state: ${{ steps.root-stack-state.outputs.dev }}
+      prod-root-stack-state: ${{ steps.root-stack-state.outputs.prod }}
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install yq
+        uses: mikefarah/yq@v4.48.2
+
+      - name: Read root stack state
+        id: root-stack-state
+        run: |
+          DEV_ROOT_STACK_STATE=$(yq -r '.RootStack.State' environments/dev/dev-parameters.yaml)
+          PROD_ROOT_STACK_STATE=$(yq -r '.RootStack.State' environments/prod/prod-parameters.yaml)
+
+          echo "Dev RootStack.State: $DEV_ROOT_STACK_STATE"
+          echo "Prod RootStack.State: $PROD_ROOT_STACK_STATE"
+
+          echo "dev=$DEV_ROOT_STACK_STATE" >> "$GITHUB_OUTPUT"
+          echo "prod=$PROD_ROOT_STACK_STATE" >> "$GITHUB_OUTPUT"
 
   # ============================================================
   # Common validation
@@ -98,10 +136,12 @@ jobs:
     environment:
       name: dev
     needs: 
-      - validate
       - changes
+      - deployment-guard
+      - validate
     if: |
-      needs.changes.outputs.dev == 'true'
+      (needs.changes.outputs.dev == 'true' || needs.changes.outputs.common == 'true') &&
+      needs.deployment-guard.outputs.dev-root-stack-state == 'enabled'
 
     runs-on: ubuntu-latest
 
@@ -153,10 +193,12 @@ jobs:
     environment:
       name: prod
     needs: 
-      - validate
       - changes
+      - deployment-guard
+      - validate
     if: |
-      needs.changes.outputs.prod == 'true'
+      needs.changes.outputs.prod == 'true' &&
+      needs.deployment-guard.outputs.prod-root-stack-state == 'enabled'
     runs-on: ubuntu-latest
 
     permissions:
@@ -194,6 +236,97 @@ jobs:
               tail -n 120 cfn-apply-prod-output.txt
             else
               echo 'The prod apply did not start; inspect the workflow logs.'
+            fi
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ============================================================
+  # Destroy Dev
+  # ============================================================
+  destroy-dev:
+    name: Destroy Dev
+    needs:
+      - changes
+      - deployment-guard
+    if: |
+      needs.changes.outputs.dev == 'true' &&
+      needs.deployment-guard.outputs.dev-root-stack-state == 'disabled'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/${{ vars.AWS_ROLE_NAME }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Verify AWS identity
+        run: aws sts get-caller-identity
+
+      - name: Destroy Dev
+        run: |
+          set -o pipefail
+          ./scripts/cfn-destroy.sh dev 2>&1 | tee cfn-destroy-dev-output.txt
+
+      - name: Add to summary
+        if: always()
+        run: |
+          {
+            echo '## CloudFormation destroy — Dev'
+            echo '```text'
+            if [ -f cfn-destroy-dev-output.txt ]; then
+              tail -n 120 cfn-destroy-dev-output.txt
+            else
+              echo 'The Dev destroy did not start; inspect the workflow logs.'
+            fi
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+
+  # ============================================================
+  # Destroy Prod
+  # ============================================================
+  destroy-prod:
+    name: Destroy Prod
+    needs:
+      - changes
+      - deployment-guard
+    if: |
+      needs.changes.outputs.prod == 'true' &&
+      needs.deployment-guard.outputs.prod-root-stack-state == 'disabled'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/${{ vars.AWS_ROLE_NAME }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Verify AWS identity
+        run: aws sts get-caller-identity
+
+      - name: Destroy Prod
+        run: |
+          set -o pipefail
+          ./scripts/cfn-destroy.sh prod 2>&1 | tee cfn-destroy-prod-output.txt
+
+      - name: Add to summary
+        if: always()
+        run: |
+          {
+            echo '## CloudFormation destroy — Prod'
+            echo '```text'
+            if [ -f cfn-destroy-prod-output.txt ]; then
+              tail -n 120 cfn-destroy-prod-output.txt
+            else
+              echo 'The Prod destroy did not start; inspect the workflow logs.'
             fi
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"

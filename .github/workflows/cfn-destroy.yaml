@@ -24,13 +24,51 @@ env:
   AWS_REGION: ${{ vars.AWS_REGION }}
 
 jobs:
+  # ============================================================
+  # Deployment Guard
+  # ============================================================
+  deployment-guard:
+    name: Deployment Guard
+    runs-on: ubuntu-latest
+
+    outputs:
+      dev-root-stack-state: ${{ steps.root-stack-state.outputs.dev }}
+      prod-root-stack-state: ${{ steps.root-stack-state.outputs.prod }}
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install yq
+        uses: mikefarah/yq@v4.48.2
+
+      - name: Read root stack state
+        id: root-stack-state
+        run: |
+          DEV_ROOT_STACK_STATE=$(yq -r '.RootStack.State' environments/dev/dev-parameters.yaml)
+          PROD_ROOT_STACK_STATE=$(yq -r '.RootStack.State' environments/prod/prod-parameters.yaml)
+
+          echo "Dev RootStack.State: $DEV_ROOT_STACK_STATE"
+          echo "Prod RootStack.State: $PROD_ROOT_STACK_STATE"
+
+          echo "dev=$DEV_ROOT_STACK_STATE" >> "$GITHUB_OUTPUT"
+          echo "prod=$PROD_ROOT_STACK_STATE" >> "$GITHUB_OUTPUT"
+
 
   # ============================================================
   # Destroy Dev
   # ============================================================
   destroy-dev:
     name: Destroy Dev
-    if: inputs.environment == 'dev' && inputs.confirmation == 'DESTROY'
+    needs:
+      - deployment-guard
+    if: |
+      inputs.environment == 'dev' &&
+      inputs.confirmation == 'DESTROY' &&
+      needs.deployment-guard.outputs.dev-root-stack-state == 'disabled'
     runs-on: ubuntu-latest
 
     steps:
@@ -71,7 +109,12 @@ jobs:
   # ============================================================
   destroy-prod:
     name: Destroy Prod
-    if: inputs.environment == 'prod' && inputs.confirmation == 'DESTROY'
+    needs:
+      - deployment-guard
+    if: |
+      inputs.environment == 'prod' &&
+      inputs.confirmation == 'DESTROY' &&
+      needs.deployment-guard.outputs.prod-root-stack-state == 'disabled'
     runs-on: ubuntu-latest
 
     steps:
