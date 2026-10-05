@@ -2,6 +2,9 @@ Project:
   Name: sparrowx
   Environment: prod
 
+RootStack:
+  State: disabled
+
 Network:
   Mode: enabled
   VpcCidr: 10.10.0.0/16

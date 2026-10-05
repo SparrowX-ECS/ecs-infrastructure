@@ -39,7 +39,6 @@ PACKAGED_TEMPLATE="/tmp/${ENVIRONMENT}-packaged.yaml"
 TMP_JSON_PARAMETERS_FILE="/tmp/${ENVIRONMENT}-parameters.json"
 
 ARTIFACT_PREFIX="artifacts/${ENVIRONMENT}"
-PACKAGED_S3_KEY="${ENVIRONMENT}/packaged.yaml"
 
 CHANGE_SET_NAME="plan-${GITHUB_RUN_ID:-$(date +%s)}"
 
@@ -112,6 +111,8 @@ fi
 PROJECT_NAME=$(yq -r '.Project.Name' "$PARAMETERS_FILE")
 ENVIRONMENT_NAME=$(yq -r '.Project.Environment' "$PARAMETERS_FILE")
 
+ROOT_STACK_STATE=$(yq -r '.RootStack.State' "$PARAMETERS_FILE")
+
 VPC_CIDR=$(yq -r '.Network.VpcCidr' "$PARAMETERS_FILE")
 
 PUBLIC_SUBNET_A=$(yq -r '.Network.PublicSubnets.A' "$PARAMETERS_FILE")
@@ -149,7 +150,7 @@ CLOUDFRONT_MODE=$(yq -r '.CloudFront.Mode' "$PARAMETERS_FILE")
 
 
 # ============================================================
-# Validate environment consistency
+# Validations
 # ============================================================
 
 if [[ "$ENVIRONMENT_NAME" != "$ENVIRONMENT" ]]; then
@@ -159,6 +160,12 @@ if [[ "$ENVIRONMENT_NAME" != "$ENVIRONMENT" ]]; then
     exit 1
 fi
 
+if [[ "$ROOT_STACK_STATE" != "enabled" &&
+      "$ROOT_STACK_STATE" != "disabled" ]]; then
+    echo "ERROR: Invalid RootStack.State: $ROOT_STACK_STATE"
+    echo "Expected: enabled or disabled"
+    exit 1
+fi
 
 # ============================================================
 # Generate AWS CLI parameter file
@@ -316,7 +323,7 @@ STACK_STATUS=$(
         2>/dev/null || echo "NOT_FOUND"
 )
 
-echo "Current stack status: $STACK_STATUS"
+echo "==> Current stack status: $STACK_STATUS"
 
 # ============================================================
 # Handle existing REVIEW_IN_PROGRESS stack
@@ -343,10 +350,49 @@ fi
 
 
 # ============================================================
+# Determine planned action
+# ============================================================
+
+if [[ "$ROOT_STACK_STATE" == "disabled" ]]; then
+
+    if [[ "$STACK_STATUS" == "NOT_FOUND" ]]; then
+        PLANNED_ACTION="NO_CHANGE"
+    else
+        PLANNED_ACTION="DELETE"
+    fi
+
+elif [[ "$ROOT_STACK_STATE" == "enabled" ]]; then
+
+    if [[ "$STACK_STATUS" == "NOT_FOUND" ]]; then
+        PLANNED_ACTION="CREATE"
+    else
+        PLANNED_ACTION="UPDATE"
+    fi
+
+fi
+
+echo
+echo "============================================================"
+echo "CloudFormation Planned Action"
+echo "============================================================"
+echo "==> Root stack desired state: $ROOT_STACK_STATE"
+echo "==> Current stack status: $STACK_STATUS"
+echo "==> Planned action: $PLANNED_ACTION"
+
+# ============================================================
+# Stop for DELETE / NO_CHANGE
+# ============================================================
+
+if [[ "$PLANNED_ACTION" == "DELETE" ||
+      "$PLANNED_ACTION" == "NO_CHANGE" ]]; then
+    exit 0
+fi
+
+# ============================================================
 # Determine change set type
 # ============================================================
 
-if [[ "$STACK_STATUS" == "NOT_FOUND" ]]; then
+if [[ "$PLANNED_ACTION" == "CREATE" ]]; then
 
     CHANGE_SET_TYPE="CREATE"
 
@@ -417,4 +463,4 @@ echo
 echo "============================================================"
 echo "CloudFormation plan complete"
 echo "============================================================"
-echo "No changes were executed."
+echo "Plan completed. No infrastructure changes were executed."
