@@ -63,9 +63,12 @@ jobs:
     outputs:
       dev-root-stack-state: ${{ steps.root-stack-state.outputs.dev }}
       prod-root-stack-state: ${{ steps.root-stack-state.outputs.prod }}
+      dev-root-stack-exists: ${{ steps.stack-existence.outputs.dev }}
+      prod-root-stack-exists: ${{ steps.stack-existence.outputs.prod }}
 
     permissions:
       contents: read
+      id-token: write
 
     steps:
       - name: Checkout
@@ -79,12 +82,46 @@ jobs:
         run: |
           DEV_ROOT_STACK_STATE=$(yq -r '.RootStack.State' environments/dev/dev-parameters.yaml)
           PROD_ROOT_STACK_STATE=$(yq -r '.RootStack.State' environments/prod/prod-parameters.yaml)
+          PROJECT_NAME_DEV=$(yq -r '.Project.Name' environments/dev/dev-parameters.yaml)
+          PROJECT_NAME_PROD=$(yq -r '.Project.Name' environments/prod/prod-parameters.yaml)
 
           echo "Dev RootStack.State: $DEV_ROOT_STACK_STATE"
           echo "Prod RootStack.State: $PROD_ROOT_STACK_STATE"
 
+          echo "PROJECT_NAME=$PROJECT_NAME_DEV" >> "$GITHUB_ENV"
+          echo "PROJECT_NAME_PROD=$PROJECT_NAME_PROD" >> "$GITHUB_ENV"
+
           echo "dev=$DEV_ROOT_STACK_STATE" >> "$GITHUB_OUTPUT"
           echo "prod=$PROD_ROOT_STACK_STATE" >> "$GITHUB_OUTPUT"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/${{ vars.AWS_ROLE_NAME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Check root stack existence
+        id: stack-existence
+        run: |
+          check_stack() {
+            local environment="$1"
+            local project_name="$2"
+            local stack_name="${project_name}-${environment}-root-stack"
+
+            if aws cloudformation describe-stacks \
+              --stack-name "$stack_name" \
+              --region "$AWS_REGION" \
+              > /dev/null 2>&1; then
+              echo "$environment=true" >> "$GITHUB_OUTPUT"
+              echo "$environment: root stack exists"
+            else
+              echo "$environment=false" >> "$GITHUB_OUTPUT"
+              echo "$environment: root stack does not exist"
+            fi
+          }
+
+          check_stack dev "$PROJECT_NAME_DEV"
+          check_stack prod "$PROJECT_NAME_PROD"
 
   # ============================================================
   # Common validation
@@ -250,8 +287,13 @@ jobs:
       - deployment-guard
     if: |
       needs.changes.outputs.dev == 'true' &&
-      needs.deployment-guard.outputs.dev-root-stack-state == 'disabled'
+      needs.deployment-guard.outputs.dev-root-stack-state == 'disabled' &&
+      needs.deployment-guard.outputs.prod-root-stack-exists == 'true'
     runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      id-token: write
 
     steps:
       - name: Checkout
@@ -296,8 +338,13 @@ jobs:
       - deployment-guard
     if: |
       needs.changes.outputs.prod == 'true' &&
-      needs.deployment-guard.outputs.prod-root-stack-state == 'disabled'
+      needs.deployment-guard.outputs.prod-root-stack-state == 'disabled' &&
+      needs.deployment-guard.outputs.prod-root-stack-exists == 'true'
     runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      id-token: write
 
     steps:
       - name: Checkout
