@@ -75,6 +75,19 @@ POSTGRES_ENGINE_VERSION=$(yq -r '.PostgreSQL.EngineVersion' "$PARAMETERS_FILE")
 CLOUDFRONT_CERTIFICATE_ARN=$(yq -r '.CloudFront.CertificateArn' "$PARAMETERS_FILE")
 DOMAIN_NAME=$(yq -r '.CloudFront.DomainName' "$PARAMETERS_FILE")
 
+PROMETHEUS_IMAGE=$(yq -r '.Prometheus.Image' "$PARAMETERS_FILE")
+PROMETHEUS_CPU=$(yq -r '.Prometheus.Cpu' "$PARAMETERS_FILE")
+PROMETHEUS_MEMORY=$(yq -r '.Prometheus.Memory' "$PARAMETERS_FILE")
+PROMETHEUS_DESIRED_COUNT=$(yq -r '.Prometheus.DesiredCount' "$PARAMETERS_FILE")
+PROMETHEUS_CONTAINER_PORT=$(yq -r '.Prometheus.ContainerPort' "$PARAMETERS_FILE")
+PROMETHEUS_RETENTION=$(yq -r '.Prometheus.Retention' "$PARAMETERS_FILE")
+
+GRAFANA_IMAGE=$(yq -r '.Grafana.Image' "$PARAMETERS_FILE")
+GRAFANA_CPU=$(yq -r '.Grafana.Cpu' "$PARAMETERS_FILE")
+GRAFANA_MEMORY=$(yq -r '.Grafana.Memory' "$PARAMETERS_FILE")
+GRAFANA_DESIRED_COUNT=$(yq -r '.Grafana.DesiredCount' "$PARAMETERS_FILE")
+GRAFANA_CONTAINER_PORT=$(yq -r '.Grafana.ContainerPort' "$PARAMETERS_FILE")
+
 # Feature Toggle Variables
 NETWORK_MODE=$(yq -r '.Network.Mode' "$PARAMETERS_FILE")
 ECR_MODE=$(yq -r '.ECR.Mode' "$PARAMETERS_FILE")
@@ -82,6 +95,7 @@ ECS_MODE=$(yq -r '.ECS.Mode' "$PARAMETERS_FILE")
 LOADBALANCER_MODE=$(yq -r '.LoadBalancer.Mode' "$PARAMETERS_FILE")
 POSTGRESQL_MODE=$(yq -r '.PostgreSQL.Mode' "$PARAMETERS_FILE")
 CLOUDFRONT_MODE=$(yq -r '.CloudFront.Mode' "$PARAMETERS_FILE")
+OBSERVABILITY_MODE=$(yq -r '.Observability.Mode' "$PARAMETERS_FILE")
 
 
 # ============================================================
@@ -197,6 +211,54 @@ cat > "$TMP_JSON_PARAMETERS_FILE" <<EOF
   {
     "ParameterKey": "CloudFrontMode",
     "ParameterValue": "$CLOUDFRONT_MODE"
+  },
+  {
+  "ParameterKey": "ObservabilityMode",
+  "ParameterValue": "$OBSERVABILITY_MODE"
+  },
+  {
+    "ParameterKey": "PrometheusImage",
+    "ParameterValue": "$PROMETHEUS_IMAGE"
+  },
+  {
+    "ParameterKey": "PrometheusCpu",
+    "ParameterValue": "$PROMETHEUS_CPU"
+  },
+  {
+    "ParameterKey": "PrometheusMemory",
+    "ParameterValue": "$PROMETHEUS_MEMORY"
+  },
+  {
+    "ParameterKey": "PrometheusDesiredCount",
+    "ParameterValue": "$PROMETHEUS_DESIRED_COUNT"
+  },
+  {
+    "ParameterKey": "PrometheusContainerPort",
+    "ParameterValue": "$PROMETHEUS_CONTAINER_PORT"
+  },
+  {
+    "ParameterKey": "PrometheusRetention",
+    "ParameterValue": "$PROMETHEUS_RETENTION"
+  },
+  {
+    "ParameterKey": "GrafanaImage",
+    "ParameterValue": "$GRAFANA_IMAGE"
+  },
+  {
+    "ParameterKey": "GrafanaCpu",
+    "ParameterValue": "$GRAFANA_CPU"
+  },
+  {
+    "ParameterKey": "GrafanaMemory",
+    "ParameterValue": "$GRAFANA_MEMORY"
+  },
+  {
+    "ParameterKey": "GrafanaDesiredCount",
+    "ParameterValue": "$GRAFANA_DESIRED_COUNT"
+  },
+  {
+    "ParameterKey": "GrafanaContainerPort",
+    "ParameterValue": "$GRAFANA_CONTAINER_PORT"
   }
 ]
 EOF
