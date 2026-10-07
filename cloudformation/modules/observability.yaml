@@ -109,6 +109,39 @@ Parameters:
 Resources:
 
   # ============================================================
+  # Grafana Admin Credentials Secret
+  # ============================================================
+
+  GrafanaAdminSecret:
+    Type: AWS::SecretsManager::Secret
+
+    Properties:
+      Name: !Sub '${ProjectName}-${EnvironmentName}/grafana/creds'
+
+      Description: !Sub >
+        Grafana admin credentials for ${ProjectName}-${EnvironmentName}.
+
+      GenerateSecretString:
+        SecretStringTemplate: |
+          {
+            "username": "grafana-admin"
+          }
+
+        GenerateStringKey: password
+        PasswordLength: 32
+        ExcludeCharacters: '"@/\'
+
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${EnvironmentName}-grafana-secret'
+
+        - Key: Project
+          Value: !Ref ProjectName
+
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  # ============================================================
   # Prometheus Security Group
   # ============================================================
 
@@ -567,6 +600,22 @@ Resources:
 
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+      
+      Policies:
+
+        - PolicyName: !Sub '${ProjectName}-${EnvironmentName}-grafana-secret-access'
+
+          PolicyDocument:
+            Version: '2012-10-17'
+
+            Statement:
+
+              - Effect: Allow
+
+                Action:
+                  - secretsmanager:GetSecretValue
+
+                Resource: !Ref GrafanaAdminSecret
 
       Tags:
         - Key: Component
@@ -649,17 +698,22 @@ Resources:
 
           Environment:
 
-            # Prometheus is reachable through ECS Service Connect.
             - Name: PROMETHEUS_URL
               Value: !Sub 'http://prometheus:${PrometheusContainerPort}'
 
-            # Disable anonymous access.
             - Name: GF_AUTH_ANONYMOUS_ENABLED
               Value: 'false'
 
-            # Disable user sign-up.
             - Name: GF_USERS_ALLOW_SIGN_UP
               Value: 'false'
+
+            - Name: GF_SECURITY_ADMIN_USER
+              Value: grafana-admin
+
+          Secrets:
+
+            - Name: GF_SECURITY_ADMIN_PASSWORD
+              ValueFrom: !Sub '${GrafanaAdminSecret}:password::'
 
           LogConfiguration:
             LogDriver: awslogs
