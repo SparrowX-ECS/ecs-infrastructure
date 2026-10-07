@@ -22,6 +22,17 @@ Parameters:
     Default: sparrowx
 
 
+  AllowPublicAccess:
+    Type: String
+    Default: disabled
+    AllowedValues:
+      - enabled
+      - disabled
+    Description: >
+      TESTING ONLY. Enable public ALB access to Grafana and
+      Prometheus. Do not enable in production without proper
+      network and access controls.
+
   # ============================================================
   # Prometheus
   # ============================================================
@@ -101,6 +112,9 @@ Parameters:
     Default: /metrics
     Description: HTTP path exposed by monitored ECS services.
 
+Conditions:
+
+  PublicAccessEnabled: !Equals [!Ref AllowPublicAccess, enabled]
 
 # ==============================================================
 # Resources
@@ -471,6 +485,7 @@ Resources:
                   --config.file=/tmp/prometheus.yml \
                   --storage.tsdb.path=/prometheus \
                   --storage.tsdb.retention.time=${PrometheusRetention}
+                  --web.external-url=/prometheus/
 
           PortMappings:
 
@@ -560,6 +575,11 @@ Resources:
         DeploymentCircuitBreaker:
           Enable: true
           Rollback: true
+
+      LoadBalancers:
+        - ContainerName: prometheus
+          ContainerPort: !Ref PrometheusContainerPort
+          TargetGroupArn: !Ref PrometheusTargetGroup
 
       Tags:
 
@@ -710,6 +730,15 @@ Resources:
             - Name: GF_SECURITY_ADMIN_USER
               Value: grafana-admin
 
+            - Name: GF_SERVER_ROOT_URL
+              Value: !Sub
+                - 'http://${AlbDnsName}/grafana/'
+                - AlbDnsName:
+                    Fn::ImportValue: !Sub '${ProjectName}-${EnvironmentName}-AlbDnsName'
+
+            - Name: GF_SERVER_SERVE_FROM_SUB_PATH
+              Value: 'true'
+          
           Secrets:
 
             - Name: GF_SECURITY_ADMIN_PASSWORD
@@ -801,6 +830,11 @@ Resources:
           Enable: true
           Rollback: true
 
+      LoadBalancers:
+        - ContainerName: grafana
+          ContainerPort: !Ref GrafanaContainerPort
+          TargetGroupArn: !Ref GrafanaTargetGroup
+          
       Tags:
 
         - Key: Component
@@ -812,6 +846,173 @@ Resources:
         - Key: Project
           Value: !Ref ProjectName
 
+  # ============================================================
+  # Grafana ALB Target Group For TESTING ONLY
+  # ============================================================
+
+  GrafanaTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Condition: PublicAccessEnabled
+
+    Properties:
+      Name: !Sub '${ProjectName}-${EnvironmentName}-grafana'
+
+      Port: !Ref GrafanaContainerPort
+      Protocol: HTTP
+      TargetType: ip
+
+      VpcId:
+        Fn::ImportValue: !Sub '${ProjectName}-${EnvironmentName}-VpcId'
+
+      HealthCheckEnabled: true
+      HealthCheckProtocol: HTTP
+      HealthCheckPort: traffic-port
+      HealthCheckPath: /api/health
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 3
+
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${EnvironmentName}-grafana'
+        - Key: Component
+          Value: grafana
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: Project
+          Value: !Ref ProjectName
+
+
+  # ============================================================
+  # Prometheus ALB Target Group For TESTING ONLY
+  # ============================================================
+
+  PrometheusTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Condition: PublicAccessEnabled
+
+    Properties:
+      Name: !Sub '${ProjectName}-${EnvironmentName}-prometheus'
+
+      Port: !Ref PrometheusContainerPort
+      Protocol: HTTP
+      TargetType: ip
+
+      VpcId:
+        Fn::ImportValue: !Sub '${ProjectName}-${EnvironmentName}-VpcId'
+
+      HealthCheckEnabled: true
+      HealthCheckProtocol: HTTP
+      HealthCheckPort: traffic-port
+      HealthCheckPath: /-/healthy
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 3
+
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${EnvironmentName}-prometheus'
+        - Key: Component
+          Value: prometheus
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: Project
+          Value: !Ref ProjectName
+
+  # ============================================================
+  # ALB -> Grafana Ingress Rule For TESTING ONLY
+  # ============================================================
+
+  GrafanaAlbIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: PublicAccessEnabled
+
+    Properties:
+      GroupId: !Ref GrafanaSecurityGroup
+
+      IpProtocol: tcp
+      FromPort: !Ref GrafanaContainerPort
+      ToPort: !Ref GrafanaContainerPort
+
+      SourceSecurityGroupId:
+        Fn::ImportValue: !Sub '${ProjectName}-${EnvironmentName}-AlbSecurityGroupId'
+
+      Description: TESTING ONLY - Allow ALB access to Grafana.
+
+
+  # ============================================================
+  # ALB -> Prometheus Ingress Rule For TESTING ONLY
+  # ============================================================
+
+  PrometheusAlbIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: PublicAccessEnabled
+
+    Properties:
+      GroupId: !Ref PrometheusSecurityGroup
+
+      IpProtocol: tcp
+      FromPort: !Ref PrometheusContainerPort
+      ToPort: !Ref PrometheusContainerPort
+
+      SourceSecurityGroupId:
+        Fn::ImportValue: !Sub '${ProjectName}-${EnvironmentName}-AlbSecurityGroupId'
+
+      Description: TESTING ONLY - Allow ALB access to Prometheus.
+
+
+  # ============================================================
+  # Grafana ALB Listener Rule For TESTING ONLY
+  # ============================================================
+
+  GrafanaListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Condition: PublicAccessEnabled
+
+    Properties:
+      ListenerArn:
+        Fn::ImportValue: !Sub '${ProjectName}-${EnvironmentName}-AlbHttpListenerArn'
+
+      Priority: 2400
+
+      Conditions:
+        - Field: path-pattern
+          PathPatternConfig:
+            Values:
+              - /grafana
+              - /grafana/*
+
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref GrafanaTargetGroup
+
+
+  # ============================================================
+  # Prometheus ALB Listener Rule For TESTING ONLY
+  # ============================================================
+
+  PrometheusListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Condition: PublicAccessEnabled
+
+    Properties:
+      ListenerArn:
+        Fn::ImportValue: !Sub '${ProjectName}-${EnvironmentName}-AlbHttpListenerArn'
+
+      Priority: 2500
+
+      Conditions:
+        - Field: path-pattern
+          PathPatternConfig:
+            Values:
+              - /prometheus
+              - /prometheus/*
+
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref PrometheusTargetGroup
 
 # ==============================================================
 # Outputs

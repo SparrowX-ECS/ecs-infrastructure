@@ -193,6 +193,17 @@ Parameters:
       - disabled
     Description: Enable or disable the Observability Stack for this environment.
 
+  AllowPublicAccess:
+    Type: String
+    Default: disabled
+    AllowedValues:
+      - enabled
+      - disabled
+    Description: >
+      TESTING ONLY. Enable public ALB access to Grafana and
+      Prometheus. Do not enable in production without proper
+      network and access controls.
+
   # ============================================================
   # Prometheus Parameters
   # ============================================================
@@ -451,7 +462,9 @@ Resources:
       Parameters:
         ProjectName: !Ref ProjectName
         EnvironmentName: !Ref EnvironmentName
-
+        
+        AllowPublicAccess: !Ref AllowPublicAccess
+        
         PrometheusImage: !Ref PrometheusImage
         PrometheusCpu: !Ref PrometheusCpu
         PrometheusMemory: !Ref PrometheusMemory
