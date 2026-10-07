@@ -1,0 +1,815 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Description: >
+  Self-managed Prometheus and Grafana observability stack for the SparrowX ECS platform.
+
+Parameters:
+
+  # ============================================================
+  # General
+  # ============================================================
+
+  EnvironmentName:
+    Type: String
+    Description: Deployment environment. Must be either dev or prod.
+    AllowedValues:
+      - dev
+      - prod
+
+  ProjectName:
+    Type: String
+    Description: Project name used for resource naming.
+    Default: sparrowx
+
+
+  # ============================================================
+  # Prometheus
+  # ============================================================
+
+  PrometheusImage:
+    Type: String
+    Default: prom/prometheus:latest
+    Description: Prometheus container image.
+
+  PrometheusCpu:
+    Type: String
+    Default: '512'
+    Description: CPU units allocated to the Prometheus task.
+
+  PrometheusMemory:
+    Type: String
+    Default: '1024'
+    Description: Memory allocated to the Prometheus task.
+
+  PrometheusDesiredCount:
+    Type: Number
+    Default: 1
+    Description: Number of Prometheus tasks.
+
+  PrometheusContainerPort:
+    Type: Number
+    Default: 9090
+    Description: Prometheus HTTP port.
+
+  PrometheusRetention:
+    Type: String
+    Default: 7d
+    Description: Prometheus TSDB retention period.
+
+
+  # ============================================================
+  # Grafana
+  # ============================================================
+
+  GrafanaImage:
+    Type: String
+    Default: grafana/grafana:latest
+    Description: Grafana container image.
+
+  GrafanaCpu:
+    Type: String
+    Default: '256'
+    Description: CPU units allocated to the Grafana task.
+
+  GrafanaMemory:
+    Type: String
+    Default: '512'
+    Description: Memory allocated to the Grafana task.
+
+  GrafanaDesiredCount:
+    Type: Number
+    Default: 1
+    Description: Number of Grafana tasks.
+
+  GrafanaContainerPort:
+    Type: Number
+    Default: 3000
+    Description: Grafana HTTP port.
+
+
+  # ============================================================
+  # Monitoring configuration
+  # ============================================================
+
+  MetricsPort:
+    Type: Number
+    Default: 8000
+    Description: Port used by monitored ECS services for /metrics.
+
+  MetricsPath:
+    Type: String
+    Default: /metrics
+    Description: HTTP path exposed by monitored ECS services.
+
+
+# ==============================================================
+# Resources
+# ==============================================================
+
+Resources:
+
+  # ============================================================
+  # Prometheus Security Group
+  # ============================================================
+
+  PrometheusSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub 'Security group for ${ProjectName}-${EnvironmentName} Prometheus.'
+
+      VpcId:
+        Fn::ImportValue: !Sub '${ProjectName}-${EnvironmentName}-VpcId'
+
+      SecurityGroupIngress:
+
+        # Grafana -> Prometheus
+        - Description: Allow Grafana to query Prometheus.
+          IpProtocol: tcp
+          FromPort: !Ref PrometheusContainerPort
+          ToPort: !Ref PrometheusContainerPort
+          SourceSecurityGroupId: !Ref GrafanaSecurityGroup
+
+      SecurityGroupEgress:
+        # General outbound access.
+        - Description: Allow Prometheus to reach ECS application tasks.
+          IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${EnvironmentName}-prometheus-sg'
+        - Key: Component
+          Value: prometheus
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: Project
+          Value: !Ref ProjectName
+
+
+  # ============================================================
+  # Grafana Security Group
+  # ============================================================
+
+  GrafanaSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub 'Security group for ${ProjectName}-${EnvironmentName} Grafana.'
+
+      VpcId:
+        Fn::ImportValue: !Sub '${ProjectName}-${EnvironmentName}-VpcId'
+
+      SecurityGroupIngress:
+
+        # Internal access to Grafana.
+        #
+        # This intentionally does not allow 0.0.0.0/0.
+        # Access can be granted through the existing ECS/service
+        # security group or an internal access path.
+        - Description: Allow internal ECS traffic to Grafana.
+          IpProtocol: tcp
+          FromPort: !Ref GrafanaContainerPort
+          ToPort: !Ref GrafanaContainerPort
+          SourceSecurityGroupId:
+            Fn::ImportValue: !Sub '${ProjectName}-${EnvironmentName}-EcsServiceSecurityGroupId'
+
+      SecurityGroupEgress:
+        # General outbound access.
+        - Description: Allow outbound traffic.
+          IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${EnvironmentName}-grafana-sg'
+        - Key: Component
+          Value: grafana
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: Project
+          Value: !Ref ProjectName
+
+
+  # ============================================================
+  # Allow Prometheus to scrape ECS application services
+  # ============================================================
+
+  ApplicationMetricsIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId:
+        Fn::ImportValue: !Sub '${ProjectName}-${EnvironmentName}-EcsServiceSecurityGroupId'
+
+      IpProtocol: tcp
+
+      FromPort: !Ref MetricsPort
+      ToPort: !Ref MetricsPort
+
+      SourceSecurityGroupId: !Ref PrometheusSecurityGroup
+
+
+  # ============================================================
+  # Prometheus Log Group
+  # ============================================================
+
+  PrometheusLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+
+    Properties:
+      LogGroupName: !Sub '/ecs/${ProjectName}/${EnvironmentName}/prometheus'
+      RetentionInDays: 3
+
+      Tags:
+        - Key: Component
+          Value: prometheus
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: Project
+          Value: !Ref ProjectName
+
+
+  # ============================================================
+  # Grafana Log Group
+  # ============================================================
+
+  GrafanaLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+
+    Properties:
+      LogGroupName: !Sub '/ecs/${ProjectName}/${EnvironmentName}/grafana'
+      RetentionInDays: 3
+
+      Tags:
+        - Key: Component
+          Value: grafana
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: Project
+          Value: !Ref ProjectName
+
+
+  # ============================================================
+  # Prometheus Task Execution Role
+  # ============================================================
+
+  PrometheusTaskExecutionRole:
+    Type: AWS::IAM::Role
+
+    Properties:
+      Description: !Sub >
+        ECS execution role for ${ProjectName}-${EnvironmentName} Prometheus.
+
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+
+        Statement:
+          - Effect: Allow
+
+            Principal:
+              Service:
+                - ecs-tasks.amazonaws.com
+
+            Action:
+              - sts:AssumeRole
+
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+
+      Tags:
+        - Key: Component
+          Value: prometheus
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: Project
+          Value: !Ref ProjectName
+
+
+  # ============================================================
+  # Prometheus Task Role
+  #
+  # Used by Prometheus for native AWS ECS service discovery.
+  # ============================================================
+
+  PrometheusTaskRole:
+    Type: AWS::IAM::Role
+
+    Properties:
+      Description: !Sub >
+        Task role for ${ProjectName}-${EnvironmentName} Prometheus ECS discovery.
+
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+
+        Statement:
+          - Effect: Allow
+
+            Principal:
+              Service:
+                - ecs-tasks.amazonaws.com
+
+            Action:
+              - sts:AssumeRole
+
+      Policies:
+
+        - PolicyName: !Sub '${ProjectName}-${EnvironmentName}-prometheus-ecs-discovery'
+
+          PolicyDocument:
+            Version: '2012-10-17'
+
+            Statement:
+
+              - Effect: Allow
+
+                Action:
+                  - ecs:ListClusters
+                  - ecs:DescribeClusters
+                  - ecs:ListServices
+                  - ecs:DescribeServices
+                  - ecs:ListTasks
+                  - ecs:DescribeTasks
+
+                Resource: '*'
+
+      Tags:
+        - Key: Component
+          Value: prometheus
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: Project
+          Value: !Ref ProjectName
+
+  # ============================================================
+  # Prometheus Task Definition
+  # ============================================================
+
+  PrometheusTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+
+    Properties:
+
+      Family: !Sub '${ProjectName}-${EnvironmentName}-prometheus'
+
+      NetworkMode: awsvpc
+
+      RequiresCompatibilities:
+        - FARGATE
+
+      Cpu: !Ref PrometheusCpu
+      Memory: !Ref PrometheusMemory
+
+      ExecutionRoleArn: !GetAtt PrometheusTaskExecutionRole.Arn
+      TaskRoleArn: !GetAtt PrometheusTaskRole.Arn
+
+      ContainerDefinitions:
+
+        - Name: prometheus
+
+          Image: !Ref PrometheusImage
+
+          Essential: true
+
+          Environment:
+            - Name: ECS_CLUSTER_ARN
+              Value:
+                Fn::ImportValue: !Sub '${ProjectName}-${EnvironmentName}-EcsClusterArn'
+
+          EntryPoint:
+            - /bin/sh
+            - -c
+
+          Command:
+            - !Sub |
+                cat > /tmp/prometheus.yml <<'EOF'
+                global:
+                  scrape_interval: 15s
+                  evaluation_interval: 15s
+
+                scrape_configs:
+
+                  - job_name: 'ecs-services'
+
+                    metrics_path: ${MetricsPath}
+
+                    aws_sd_configs:
+                      - role: ecs
+                        region: ${AWS::Region}
+                        refresh_interval: 30s
+                        port: ${MetricsPort}
+                        clusters:
+                          - ${!ECS_CLUSTER_ARN}
+
+                    relabel_configs:
+
+                      - source_labels:
+                          - __meta_ecs_tag_service_Monitoring
+                        regex: enabled
+                        action: keep
+
+                      - source_labels:
+                          - __meta_ecs_desired_status
+                        regex: RUNNING
+                        action: keep
+
+                      - source_labels:
+                          - __meta_ecs_service
+                        target_label: service
+
+                      - target_label: environment
+                        replacement: ${EnvironmentName}
+
+                      - source_labels:
+                          - __meta_ecs_cluster
+                        target_label: cluster
+
+                      - source_labels:
+                          - __meta_ecs_task_arn
+                        target_label: task_arn
+
+                      - source_labels:
+                          - __meta_ecs_availability_zone
+                        target_label: availability_zone
+                EOF
+
+                exec /bin/prometheus \
+                  --config.file=/tmp/prometheus.yml \
+                  --storage.tsdb.path=/prometheus \
+                  --storage.tsdb.retention.time=${PrometheusRetention}
+
+          PortMappings:
+
+            - ContainerPort: !Ref PrometheusContainerPort
+              Name: prometheus
+              Protocol: tcp
+
+          LogConfiguration:
+            LogDriver: awslogs
+
+            Options:
+              awslogs-group: !Ref PrometheusLogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: ecs
+
+      Tags:
+        - Key: Component
+          Value: prometheus
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: Project
+          Value: !Ref ProjectName
+
+
+  # ============================================================
+  # Prometheus ECS Service
+  # ============================================================
+
+  PrometheusService:
+    Type: AWS::ECS::Service
+
+    Properties:
+
+      ServiceName: prometheus
+
+      EnableExecuteCommand: true
+
+      Cluster:
+        Fn::ImportValue: !Sub '${ProjectName}-${EnvironmentName}-EcsClusterArn'
+
+      LaunchType: FARGATE
+
+      PlatformVersion: '1.4.0'
+
+      DesiredCount: !Ref PrometheusDesiredCount
+
+      TaskDefinition: !Ref PrometheusTaskDefinition
+
+      ServiceConnectConfiguration:
+        Enabled: true
+
+        Services:
+
+          - PortName: prometheus
+
+            DiscoveryName: prometheus
+
+            ClientAliases:
+
+              - Port: !Ref PrometheusContainerPort
+                DnsName: prometheus
+
+      NetworkConfiguration:
+
+        AwsvpcConfiguration:
+
+          AssignPublicIp: DISABLED
+
+          SecurityGroups:
+            - !Ref PrometheusSecurityGroup
+
+            - Fn::ImportValue: !Sub '${ProjectName}-${EnvironmentName}-EcsServiceSecurityGroupId'
+
+          Subnets:
+
+            - Fn::ImportValue: !Sub '${ProjectName}-${EnvironmentName}-PrivateSubnetA'
+
+            - Fn::ImportValue: !Sub '${ProjectName}-${EnvironmentName}-PrivateSubnetB'
+
+            - Fn::ImportValue: !Sub '${ProjectName}-${EnvironmentName}-PrivateSubnetC'
+
+      DeploymentConfiguration:
+
+        MaximumPercent: 200
+        MinimumHealthyPercent: 100
+
+        DeploymentCircuitBreaker:
+          Enable: true
+          Rollback: true
+
+      Tags:
+
+        - Key: Component
+          Value: prometheus
+
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+        - Key: Project
+          Value: !Ref ProjectName
+
+
+  # ============================================================
+  # Grafana Task Execution Role
+  # ============================================================
+
+  GrafanaTaskExecutionRole:
+    Type: AWS::IAM::Role
+
+    Properties:
+
+      Description: !Sub >
+        ECS execution role for ${ProjectName}-${EnvironmentName} Grafana.
+
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+
+        Statement:
+          - Effect: Allow
+
+            Principal:
+              Service:
+                - ecs-tasks.amazonaws.com
+
+            Action:
+              - sts:AssumeRole
+
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+
+      Tags:
+        - Key: Component
+          Value: grafana
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: Project
+          Value: !Ref ProjectName
+
+
+  # ============================================================
+  # Grafana Task Role
+  # ============================================================
+
+  GrafanaTaskRole:
+    Type: AWS::IAM::Role
+
+    Properties:
+
+      Description: !Sub >
+        Task role for ${ProjectName}-${EnvironmentName} Grafana.
+
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+
+        Statement:
+          - Effect: Allow
+
+            Principal:
+              Service:
+                - ecs-tasks.amazonaws.com
+
+            Action:
+              - sts:AssumeRole
+
+      Tags:
+        - Key: Component
+          Value: grafana
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: Project
+          Value: !Ref ProjectName
+
+
+  # ============================================================
+  # Grafana Task Definition
+  # ============================================================
+
+  GrafanaTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+
+    Properties:
+
+      Family: !Sub '${ProjectName}-${EnvironmentName}-grafana'
+
+      NetworkMode: awsvpc
+
+      RequiresCompatibilities:
+        - FARGATE
+
+      Cpu: !Ref GrafanaCpu
+      Memory: !Ref GrafanaMemory
+
+      ExecutionRoleArn: !GetAtt GrafanaTaskExecutionRole.Arn
+      TaskRoleArn: !GetAtt GrafanaTaskRole.Arn
+
+      ContainerDefinitions:
+
+        - Name: grafana
+
+          Image: !Ref GrafanaImage
+
+          Essential: true
+
+          PortMappings:
+
+            - ContainerPort: !Ref GrafanaContainerPort
+              Name: grafana
+              Protocol: tcp
+
+          Environment:
+
+            # Prometheus is reachable through ECS Service Connect.
+            - Name: PROMETHEUS_URL
+              Value: !Sub 'http://prometheus:${PrometheusContainerPort}'
+
+            # Disable anonymous access.
+            - Name: GF_AUTH_ANONYMOUS_ENABLED
+              Value: 'false'
+
+            # Disable user sign-up.
+            - Name: GF_USERS_ALLOW_SIGN_UP
+              Value: 'false'
+
+          LogConfiguration:
+            LogDriver: awslogs
+
+            Options:
+              awslogs-group: !Ref GrafanaLogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: ecs
+
+      Tags:
+
+        - Key: Component
+          Value: grafana
+
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+        - Key: Project
+          Value: !Ref ProjectName
+
+
+  # ============================================================
+  # Grafana ECS Service
+  # ============================================================
+
+  GrafanaService:
+    Type: AWS::ECS::Service
+
+    Properties:
+
+      ServiceName: grafana
+
+      EnableExecuteCommand: true
+
+      Cluster:
+        Fn::ImportValue: !Sub '${ProjectName}-${EnvironmentName}-EcsClusterArn'
+
+      LaunchType: FARGATE
+
+      PlatformVersion: '1.4.0'
+
+      DesiredCount: !Ref GrafanaDesiredCount
+
+      TaskDefinition: !Ref GrafanaTaskDefinition
+
+      ServiceConnectConfiguration:
+        Enabled: true
+
+        Services:
+
+          - PortName: grafana
+
+            DiscoveryName: grafana
+
+            ClientAliases:
+
+              - Port: !Ref GrafanaContainerPort
+                DnsName: grafana
+
+      NetworkConfiguration:
+
+        AwsvpcConfiguration:
+
+          AssignPublicIp: DISABLED
+
+          SecurityGroups:
+            - !Ref GrafanaSecurityGroup
+
+            - Fn::ImportValue: !Sub '${ProjectName}-${EnvironmentName}-EcsServiceSecurityGroupId'
+
+          Subnets:
+
+            - Fn::ImportValue: !Sub '${ProjectName}-${EnvironmentName}-PrivateSubnetA'
+
+            - Fn::ImportValue: !Sub '${ProjectName}-${EnvironmentName}-PrivateSubnetB'
+
+            - Fn::ImportValue: !Sub '${ProjectName}-${EnvironmentName}-PrivateSubnetC'
+
+      DeploymentConfiguration:
+
+        MaximumPercent: 200
+        MinimumHealthyPercent: 100
+
+        DeploymentCircuitBreaker:
+          Enable: true
+          Rollback: true
+
+      Tags:
+
+        - Key: Component
+          Value: grafana
+
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+        - Key: Project
+          Value: !Ref ProjectName
+
+
+# ==============================================================
+# Outputs
+# ==============================================================
+
+Outputs:
+
+  # ============================================================
+  # Prometheus
+  # ============================================================
+
+  PrometheusServiceName:
+    Description: Prometheus ECS service name.
+    Value: !Ref PrometheusService
+    Export:
+      Name: !Sub '${ProjectName}-${EnvironmentName}-PrometheusServiceName'
+
+
+  PrometheusSecurityGroupId:
+    Description: Prometheus security group ID.
+    Value: !Ref PrometheusSecurityGroup
+    Export:
+      Name: !Sub '${ProjectName}-${EnvironmentName}-PrometheusSecurityGroupId'
+
+
+  PrometheusEndpoint:
+    Description: Internal Prometheus endpoint.
+    Value: !Sub 'http://prometheus:${PrometheusContainerPort}'
+    Export:
+      Name: !Sub '${ProjectName}-${EnvironmentName}-PrometheusEndpoint'
+
+
+  # ============================================================
+  # Grafana
+  # ============================================================
+
+  GrafanaServiceName:
+    Description: Grafana ECS service name.
+    Value: !Ref GrafanaService
+    Export:
+      Name: !Sub '${ProjectName}-${EnvironmentName}-GrafanaServiceName'
+
+
+  GrafanaSecurityGroupId:
+    Description: Grafana security group ID.
+    Value: !Ref GrafanaSecurityGroup
+    Export:
+      Name: !Sub '${ProjectName}-${EnvironmentName}-GrafanaSecurityGroupId'
+
+
+  GrafanaEndpoint:
+    Description: Internal Grafana endpoint.
+    Value: !Sub 'http://grafana:${GrafanaContainerPort}'
+    Export:
+      Name: !Sub '${ProjectName}-${EnvironmentName}-GrafanaEndpoint'
