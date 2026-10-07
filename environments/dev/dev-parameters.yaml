@@ -55,6 +55,6 @@ PostgreSQL:
   EngineVersion: "16"
 
 CloudFront:
-  Mode: disabled
+  Mode: enabled
   CertificateArn: /sparrowx/cloudfront/acm-certificate-arn
   DomainName: sparrowx-dev.mo2cloud.com
