@@ -383,6 +383,7 @@ Resources:
                   - ecs:DescribeServices
                   - ecs:ListTasks
                   - ecs:DescribeTasks
+                  - ecs:ListTagsForResource
 
                 Resource: '*'
 

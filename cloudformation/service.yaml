@@ -617,6 +617,8 @@ Resources:
       Tags:
         - Key: Service
           Value: !Ref ServiceName
+        - Key: Monitoring
+          Value: enabled
         - Key: Environment
           Value: !Ref EnvironmentName
         - Key: Project
