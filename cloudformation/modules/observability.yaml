@@ -577,9 +577,12 @@ Resources:
           Rollback: true
 
       LoadBalancers:
-        - ContainerName: prometheus
-          ContainerPort: !Ref PrometheusContainerPort
-          TargetGroupArn: !Ref PrometheusTargetGroup
+        Fn::If:
+          - PublicAccessEnabled
+          - - ContainerName: prometheus
+              ContainerPort: !Ref PrometheusContainerPort
+              TargetGroupArn: !Ref PrometheusTargetGroup
+          - !Ref AWS::NoValue
 
       Tags:
 
@@ -831,9 +834,12 @@ Resources:
           Rollback: true
 
       LoadBalancers:
-        - ContainerName: grafana
-          ContainerPort: !Ref GrafanaContainerPort
-          TargetGroupArn: !Ref GrafanaTargetGroup
+        Fn::If:
+          - PublicAccessEnabled
+          - - ContainerName: grafana
+              ContainerPort: !Ref GrafanaContainerPort
+              TargetGroupArn: !Ref GrafanaTargetGroup
+          - !Ref AWS::NoValue
           
       Tags:
 
