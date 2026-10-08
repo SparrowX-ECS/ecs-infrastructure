@@ -384,6 +384,7 @@ Resources:
                   - ecs:ListTasks
                   - ecs:DescribeTasks
                   - ecs:ListTagsForResource
+                  - ec2:DescribeNetworkInterfaces
 
                 Resource: '*'
 
