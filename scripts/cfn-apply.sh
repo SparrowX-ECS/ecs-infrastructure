@@ -87,6 +87,7 @@ GRAFANA_CPU=$(yq -r '.Grafana.Cpu' "$PARAMETERS_FILE")
 GRAFANA_MEMORY=$(yq -r '.Grafana.Memory' "$PARAMETERS_FILE")
 GRAFANA_DESIRED_COUNT=$(yq -r '.Grafana.DesiredCount' "$PARAMETERS_FILE")
 GRAFANA_CONTAINER_PORT=$(yq -r '.Grafana.ContainerPort' "$PARAMETERS_FILE")
+GRAFANA_SERVER_ROOT_URL=$(yq -r '.Grafana.ServerRootUrl' "$PARAMETERS_FILE")
 
 OBSERVABILITY_ALLOW_PUBLIC_ACCESS=$(yq -r '.Observability.AllowPublicAccess' "$PARAMETERS_FILE")
 
@@ -261,6 +262,10 @@ cat > "$TMP_JSON_PARAMETERS_FILE" <<EOF
   {
     "ParameterKey": "GrafanaContainerPort",
     "ParameterValue": "$GRAFANA_CONTAINER_PORT"
+  },
+  {
+    "ParameterKey": "GrafanaServerRootUrl",
+    "ParameterValue": "$GRAFANA_SERVER_ROOT_URL"
   },
   {
     "ParameterKey": "AllowPublicAccess",

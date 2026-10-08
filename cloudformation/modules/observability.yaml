@@ -97,6 +97,11 @@ Parameters:
     Default: 3000
     Description: Grafana HTTP port.
 
+  GrafanaServerRootUrl:
+    Type: String
+    Default: http://localhost:3000/grafana/
+    Description: Public Grafana URL, including the /grafana/ subpath.
+
 
   # ============================================================
   # Monitoring configuration
@@ -706,13 +711,59 @@ Resources:
       ExecutionRoleArn: !GetAtt GrafanaTaskExecutionRole.Arn
       TaskRoleArn: !GetAtt GrafanaTaskRole.Arn
 
+      Volumes:
+        - Name: grafana-datasources
+
       ContainerDefinitions:
+
+        - Name: grafana-provisioner
+
+          Image: public.ecr.aws/docker/library/busybox:1.36
+
+          Essential: false
+
+          EntryPoint:
+            - /bin/sh
+            - -c
+
+          Command:
+            - |
+                set -eu
+                cat > /provisioning/prometheus.yaml <<'EOF'
+                apiVersion: 1
+                prune: true
+                datasources:
+                  - name: Prometheus
+                    uid: prometheus
+                    type: prometheus
+                    access: proxy
+                    url: http://prometheus:9090
+                    isDefault: true
+                    editable: false
+                    jsonData:
+                      httpMethod: POST
+                      timeInterval: 15s
+                EOF
+
+          MountPoints:
+            - SourceVolume: grafana-datasources
+              ContainerPath: /provisioning
+              ReadOnly: false
 
         - Name: grafana
 
           Image: !Ref GrafanaImage
 
           Essential: true
+
+          DependsOn:
+            - ContainerName: grafana-provisioner
+              Condition: SUCCESS
+
+          MountPoints:
+            - SourceVolume: grafana-datasources
+              ContainerPath: /etc/grafana/provisioning/datasources
+              ReadOnly: true
 
           PortMappings:
 
@@ -735,10 +786,7 @@ Resources:
               Value: grafana-admin
 
             - Name: GF_SERVER_ROOT_URL
-              Value: !Sub
-                - 'http://${AlbDnsName}/grafana/'
-                - AlbDnsName:
-                    Fn::ImportValue: !Sub '${ProjectName}-${EnvironmentName}-AlbDnsName'
+              Value: !Ref GrafanaServerRootUrl
 
             - Name: GF_SERVER_SERVE_FROM_SUB_PATH
               Value: 'true'

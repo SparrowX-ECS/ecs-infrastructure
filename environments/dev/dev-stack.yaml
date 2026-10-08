@@ -267,6 +267,11 @@ Parameters:
     Default: 3000
     Description: Grafana HTTP port.
 
+  GrafanaServerRootUrl:
+    Type: String
+    Default: https://sparrowx-dev.mo2cloud.com/grafana/
+    Description: Public Grafana URL, including the /grafana/ subpath.
+
 Conditions:
   VPCEnabled: !Equals [!Ref VPCMode, enabled]
   LoadBalancerEnabled: !Equals [!Ref LoadBalancerMode, enabled]
@@ -477,4 +482,4 @@ Resources:
         GrafanaMemory: !Ref GrafanaMemory
         GrafanaDesiredCount: !Ref GrafanaDesiredCount
         GrafanaContainerPort: !Ref GrafanaContainerPort
-
+        GrafanaServerRootUrl: !Ref GrafanaServerRootUrl
