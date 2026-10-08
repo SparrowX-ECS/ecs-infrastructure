@@ -153,6 +153,8 @@ GRAFANA_MEMORY=$(yq -r '.Grafana.Memory' "$PARAMETERS_FILE")
 GRAFANA_DESIRED_COUNT=$(yq -r '.Grafana.DesiredCount' "$PARAMETERS_FILE")
 GRAFANA_CONTAINER_PORT=$(yq -r '.Grafana.ContainerPort' "$PARAMETERS_FILE")
 
+OBSERVABILITY_ALLOW_PUBLIC_ACCESS=$(yq -r '.Observability.AllowPublicAccess' "$PARAMETERS_FILE")
+
 # Feature Toggle Variables
 NETWORK_MODE=$(yq -r '.Network.Mode' "$PARAMETERS_FILE")
 ECR_MODE=$(yq -r '.ECR.Mode' "$PARAMETERS_FILE")
@@ -342,6 +344,10 @@ cat > "$TMP_JSON_PARAMETERS_FILE" <<EOF
   {
     "ParameterKey": "GrafanaContainerPort",
     "ParameterValue": "$GRAFANA_CONTAINER_PORT"
+  },
+  {
+    "ParameterKey": "AllowPublicAccess",
+    "ParameterValue": "$OBSERVABILITY_ALLOW_PUBLIC_ACCESS"
   }
 ]
 EOF

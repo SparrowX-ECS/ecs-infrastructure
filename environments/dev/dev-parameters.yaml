@@ -61,6 +61,7 @@ CloudFront:
 
 Observability:
   Mode: enabled
+  AllowPublicAccess: enabled
 
 Prometheus:
   Image: prom/prometheus:latest
