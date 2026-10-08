@@ -618,7 +618,7 @@ Resources:
         - Key: Service
           Value: !Ref ServiceName
         - Key: Monitoring
-          Value: enabled
+          Value: !If [IsFrontendService, disabled, enabled]
         - Key: Environment
           Value: !Ref EnvironmentName
         - Key: Project
