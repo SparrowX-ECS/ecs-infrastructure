@@ -484,8 +484,9 @@ Resources:
                 exec /bin/prometheus \
                   --config.file=/tmp/prometheus.yml \
                   --storage.tsdb.path=/prometheus \
-                  --storage.tsdb.retention.time=${PrometheusRetention}
-                  --web.external-url=/prometheus/
+                  --storage.tsdb.retention.time=${PrometheusRetention} \
+                  --web.external-url=/prometheus/ \
+                  --web.route-prefix=/prometheus/
 
           PortMappings:
 
@@ -911,7 +912,7 @@ Resources:
       HealthCheckEnabled: true
       HealthCheckProtocol: HTTP
       HealthCheckPort: traffic-port
-      HealthCheckPath: /-/healthy
+      HealthCheckPath: /prometheus/-/healthy
       HealthCheckIntervalSeconds: 30
       HealthCheckTimeoutSeconds: 5
       HealthyThresholdCount: 2
@@ -981,7 +982,7 @@ Resources:
       ListenerArn:
         Fn::ImportValue: !Sub '${ProjectName}-${EnvironmentName}-AlbHttpListenerArn'
 
-      Priority: 2400
+      Priority: 300
 
       Conditions:
         - Field: path-pattern
@@ -1007,7 +1008,7 @@ Resources:
       ListenerArn:
         Fn::ImportValue: !Sub '${ProjectName}-${EnvironmentName}-AlbHttpListenerArn'
 
-      Priority: 2500
+      Priority: 400
 
       Conditions:
         - Field: path-pattern

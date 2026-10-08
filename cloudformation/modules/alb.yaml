@@ -117,7 +117,7 @@ Resources:
     Properties:
       ListenerArn: !Ref HttpListener
 
-      Priority: 2200
+      Priority: 1200
       Conditions:
         - Field: path-pattern
           PathPatternConfig:
