@@ -77,3 +77,4 @@ Grafana:
   Memory: 512 
   DesiredCount: 1
   ContainerPort: 3000
+  ServerRootUrl: https://sparrowx-dev.mo2cloud.com/grafana/
