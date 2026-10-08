@@ -436,7 +436,7 @@ Resources:
 
           Command:
             - !Sub |
-                cat > /tmp/prometheus.yml <<'EOF'
+                cat > /tmp/prometheus.yml <<EOF
                 global:
                   scrape_interval: 15s
                   evaluation_interval: 15s
