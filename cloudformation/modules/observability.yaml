@@ -798,6 +798,9 @@ Resources:
             - Name: GF_SECURITY_CSRF_TRUSTED_ORIGINS
               Value: !Ref GrafanaCsrfTrustedOrigins
 
+            - Name: GF_SECURITY_CSRF_ADDITIONAL_HEADERS
+              Value: X-Forwarded-Host
+
             - Name: GF_SERVER_SERVE_FROM_SUB_PATH
               Value: 'true'
             
