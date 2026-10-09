@@ -272,6 +272,11 @@ Parameters:
     Default: https://sparrowx-dev.mo2cloud.com/grafana/
     Description: Public Grafana URL, including the /grafana/ subpath.
 
+  GrafanaCsrfTrustedOrigins:
+    Type: String
+    Default: https://sparrowx-dev.mo2cloud.com
+    Description: Comma-separated browser origins trusted by Grafana CSRF protection.
+
 Conditions:
   VPCEnabled: !Equals [!Ref VPCMode, enabled]
   LoadBalancerEnabled: !Equals [!Ref LoadBalancerMode, enabled]
@@ -483,3 +488,4 @@ Resources:
         GrafanaDesiredCount: !Ref GrafanaDesiredCount
         GrafanaContainerPort: !Ref GrafanaContainerPort
         GrafanaServerRootUrl: !Ref GrafanaServerRootUrl
+        GrafanaCsrfTrustedOrigins: !Ref GrafanaCsrfTrustedOrigins

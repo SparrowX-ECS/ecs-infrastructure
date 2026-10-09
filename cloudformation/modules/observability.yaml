@@ -99,8 +99,13 @@ Parameters:
 
   GrafanaServerRootUrl:
     Type: String
-    Default: http://localhost:3000/grafana/
+    Default: https://sparrowx-dev.mo2cloud.com/grafana/
     Description: Public Grafana URL, including the /grafana/ subpath.
+
+  GrafanaCsrfTrustedOrigins:
+    Type: String
+    Default: https://sparrowx-dev.mo2cloud.com
+    Description: Comma-separated browser origins trusted by Grafana CSRF protection.
 
 
   # ============================================================
@@ -789,6 +794,9 @@ Resources:
 
             - Name: GF_SERVER_ROOT_URL
               Value: !Ref GrafanaServerRootUrl
+
+            - Name: GF_SECURITY_CSRF_TRUSTED_ORIGINS
+              Value: !Ref GrafanaCsrfTrustedOrigins
 
             - Name: GF_SERVER_SERVE_FROM_SUB_PATH
               Value: 'true'
