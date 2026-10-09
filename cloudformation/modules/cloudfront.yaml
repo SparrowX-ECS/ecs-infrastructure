@@ -55,6 +55,11 @@ Resources:
               HTTPPort: 80
               HTTPSPort: 443
               OriginProtocolPolicy: http-only
+            OriginCustomHeaders: !If
+              - HasCustomDomain
+              - - HeaderName: X-Forwarded-Host
+                  HeaderValue: !Ref DomainName
+              - !Ref AWS::NoValue
         DefaultCacheBehavior:
           TargetOriginId: AlbHttpOrigin
           ViewerProtocolPolicy: redirect-to-https
