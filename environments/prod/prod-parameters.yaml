@@ -3,7 +3,7 @@ Project:
   Environment: prod
 
 RootStack:
-  State: disabled
+  State: enabled
 
 Network:
   Mode: enabled
@@ -58,3 +58,25 @@ CloudFront:
   Mode: enabled
   CertificateArn: /sparrowx/cloudfront/acm-certificate-arn
   DomainName: sparrowx-prod.mo2cloud.com
+
+
+Observability:
+  Mode: enabled
+  AllowPublicAccess: enabled
+
+Prometheus:
+  Image: prom/prometheus:latest
+  Cpu: 512
+  Memory: 1024 
+  DesiredCount: 1
+  ContainerPort: 9090
+  Retention: 7d
+
+Grafana:
+  Image: grafana/grafana:latest
+  Cpu: 512
+  Memory: 1024
+  DesiredCount: 1
+  ContainerPort: 3000
+  ServerRootUrl: https://sparrowx-prod.mo2cloud.com/grafana/
+  CsrfTrustedOrigins: https://sparrowx-prod.mo2cloud.com
