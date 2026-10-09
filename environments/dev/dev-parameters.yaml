@@ -73,8 +73,8 @@ Prometheus:
 
 Grafana:
   Image: grafana/grafana:latest
-  Cpu: 256
-  Memory: 512 
+  Cpu: 512
+  Memory: 1024
   DesiredCount: 1
   ContainerPort: 3000
   ServerRootUrl: https://sparrowx-dev.mo2cloud.com/grafana/

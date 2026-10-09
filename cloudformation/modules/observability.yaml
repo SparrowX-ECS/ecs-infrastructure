@@ -800,7 +800,10 @@ Resources:
 
             - Name: GF_SERVER_SERVE_FROM_SUB_PATH
               Value: 'true'
-          
+            
+            - Name: GF_LIVE_ALLOWED_ORIGINS
+              Value: !Ref GrafanaCsrfTrustedOrigins
+
           Secrets:
 
             - Name: GF_SECURITY_ADMIN_PASSWORD
