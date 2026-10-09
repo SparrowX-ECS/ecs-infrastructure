@@ -367,7 +367,7 @@ Resources:
     Type: AWS::CloudFormation::Stack
     Condition: ECSClusterEnabledEffective
     DependsOn:
-      - PublicNetwork
+      - PrivateNetwork
     Properties:
       TemplateURL: ../../cloudformation/modules/ecs-cluster.yaml
 
