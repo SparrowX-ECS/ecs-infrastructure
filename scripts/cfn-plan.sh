@@ -426,6 +426,32 @@ if [[ "$STACK_STATUS" == "REVIEW_IN_PROGRESS" ]]; then
     echo "==> Stale review stack removed."
 fi
 
+# ============================================================
+# Recover failed creation
+# ============================================================
+
+if [[ "$STACK_STATUS" == "ROLLBACK_COMPLETE" ||
+      "$STACK_STATUS" == "ROLLBACK_FAILED" ]]; then
+
+    echo
+    echo "==> Stack is $STACK_STATUS."
+    echo "==> Deleting failed stack before creating a fresh plan..."
+
+    aws cloudformation delete-stack \
+        --stack-name "$ROOT_STACK_NAME" \
+        --region "$REGION"
+
+    echo "==> Waiting for failed stack deletion..."
+
+    aws cloudformation wait stack-delete-complete \
+        --stack-name "$ROOT_STACK_NAME" \
+        --region "$REGION"
+
+    STACK_STATUS="NOT_FOUND"
+
+    echo "==> Failed stack deleted."
+fi
+
 
 # ============================================================
 # Determine planned action
