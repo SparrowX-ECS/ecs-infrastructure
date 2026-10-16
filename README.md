@@ -2,7 +2,7 @@
 
 This repository is the infrastructure layer for SparrowX, a fictional small SaaS company used to demonstrate platform engineering. The application repositories are sample workloads; this repository provides the repeatable AWS foundation that lets those workloads be onboarded and deployed to separate `dev` and `prod` environments.
 
-The infrastructure is implemented with AWS CloudFormation. The same reusable module set is composed twice through environment-specific root stacks and parameter files. The result is two independently managed environments with their own network, ECS cluster, load balancer, ECR namespace, databases, secrets, logs, and service-stack integration points.
+The infrastructure is implemented with AWS CloudFormation. The same reusable module set is composed twice through environment-specific root stacks and parameter files. The result is two independently managed environments with their own network, ECS cluster, load balancer, ECR namespace, databases, secrets, logs, observability services, and service-stack integration points.
 
 ## Architecture
 
@@ -21,15 +21,18 @@ ecs-infrastructure repository
 Each environment contains:
 
 - A VPC with public and private subnets, route tables, internet gateway, and configurable NAT gateways.
-- An ECR registry layout for the six sample workloads.
+- An ECR registry layout for the application workloads.
 - An ECS cluster with Service Connect defaults for private service-to-service discovery.
 - An internet-facing Application Load Balancer and exported listener/security-group values.
 - Private PostgreSQL RDS databases for `customer-api`, `notification-api`, `task-api`, and `billing-api`.
 - Generated database credentials stored in AWS Secrets Manager.
 - CloudFormation exports consumed by application service deployments.
 - Optional CloudFront distribution configuration.
+- An optional Prometheus and Grafana observability stack deployed as ECS services.
 
 ECS tasks and RDS instances are private. Public traffic enters through the ALB. Application service stacks consume the foundation exports and create their own task definitions, services, target groups, listener rules, security groups, IAM roles, and log groups.
+
+When enabled, the observability stack runs Prometheus and Grafana as private ECS services. Prometheus uses ECS service discovery to scrape application `/metrics` endpoints, while Grafana uses Prometheus as its data source for dashboards. The stack has its own security groups, IAM roles, CloudWatch log groups, health checks, retention setting, and environment-specific task sizing.
 
 ## Repository layout
 
@@ -69,7 +72,8 @@ The environment root stack composes the nested modules in dependency order:
 3. ECS cluster and Service Connect namespace.
 4. ALB and listener resources.
 5. PostgreSQL RDS databases, secrets, and database security groups.
-6. SSM parameters and optional CloudFront resources.
+6. Optional Prometheus and Grafana observability services.
+7. SSM parameters and optional CloudFront resources.
 
 The reusable [`cloudformation/service.yaml`](cloudformation/service.yaml) is deployed separately by the application repositories. It accepts the service name, environment, immutable image tag, ECR repository, Fargate size, desired count, ALB route, health-check path, optional database outputs, upstream API URLs, and CORS settings.
 
@@ -85,10 +89,33 @@ The environment files intentionally use the same schema while allowing different
 | ECS cluster | Environment-specific | Environment-specific |
 | RDS sizing | Demonstration/low cost | Production parameter set |
 | CloudFront | Configurable | Configurable |
+| Root deployment switch | `RootStack.State` | `RootStack.State` |
+| Observability | `Observability.Mode` plus Prometheus/Grafana parameters | `Observability.Mode` plus Prometheus/Grafana parameters |
 
 Environment-qualified names and exports prevent collisions between the two copies of the platform. Review both parameter files when changing shared modules because the module change may affect both environments.
 
 The repository also uses two GitHub Environments, `dev` and `prod`, to track infrastructure deployments separately. Workflow runs and deployment history for each environment remain distinct, making it clear whether a change has only reached development or has also been synchronized to production.
+
+### Deployment switches and guard behavior
+
+Infrastructure deployment is controlled by the `RootStack.State` value in the target environment parameter file. Application repositories have a corresponding `appStack.state` switch in their own environment parameter files. The reusable `deployment-guard` workflow reads both values and exposes `deployment-enabled=true` only when both are set to `enabled`.
+
+The application-level switch allows a service owner to pause that service. The infrastructure-level switch allows the platform team to freeze an entire environment during maintenance or investigation. Downstream deployment jobs use the guard output, so a disabled switch skips deployment without requiring changes to the workflow structure.
+
+These switches control whether deployment jobs act; they do not replace pull-request validation, CloudFormation planning, security gates, smoke tests, or production approval.
+
+### Observability configuration
+
+The observability stack is controlled independently in each environment parameter file:
+
+| Parameter group | Purpose |
+| --- | --- |
+| `Observability.Mode` | Enables or disables the nested observability stack. |
+| `Observability.AllowPublicAccess` | Controls the testing-only ALB routes for `/prometheus` and `/grafana`. |
+| `Prometheus.*` | Image, CPU, memory, desired count, port, and retention. |
+| `Grafana.*` | Image, CPU, memory, desired count, port, root URL, and trusted browser origins. |
+
+Prometheus and Grafana are private by default at the service-network level. Public ALB access is an explicit testing capability and should not be enabled in production without appropriate access controls. The stack remains optional so an environment can run the application platform without incurring the observability service cost.
 
 ## Local commands
 
@@ -198,7 +225,10 @@ The assumed role needs permissions appropriate to the selected operation. In par
 - Shared module changes automatically apply to `dev`, not `prod`.
 - Production-specific stack/parameter changes can trigger production apply after merge.
 - Manual sync provides an explicit path for either environment.
+- The deployment guard requires both the application and infrastructure deployment switches to be enabled before application deployment jobs can act.
 - Stack names, exports, log groups, secrets, and ECR resources are environment-qualified.
+- Prometheus and Grafana are deployed only when the environment observability switch is enabled.
+- Public Prometheus/Grafana ALB routes are explicitly marked for controlled testing.
 - Root-stack apply packages templates into S3 and waits for CloudFormation completion.
 - Failed or stale CloudFormation states are handled by the apply/plan scripts with diagnostics.
 

@@ -3,7 +3,7 @@ Project:
   Environment: dev
 
 RootStack:
-  State: enabled
+  State: disabled
 
 Network:
   Mode: enabled
