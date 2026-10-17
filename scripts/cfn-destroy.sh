@@ -23,16 +23,6 @@ command -v aws >/dev/null 2>&1 || {
   exit 1
 }
 
-# These stacks are outside the root stack and must be deleted first.
-SERVICE_STACKS=(
-  "${PROJECT_NAME}-${ENVIRONMENT}-web-portal"
-  "${PROJECT_NAME}-${ENVIRONMENT}-reporting-api"
-  "${PROJECT_NAME}-${ENVIRONMENT}-billing-api"
-  "${PROJECT_NAME}-${ENVIRONMENT}-task-api"
-  "${PROJECT_NAME}-${ENVIRONMENT}-notification-api"
-  "${PROJECT_NAME}-${ENVIRONMENT}-customer-api"
-)
-
 stack_exists() {
   local stack_name="$1"
 
@@ -40,6 +30,17 @@ stack_exists() {
     --region "$REGION" \
     --stack-name "$stack_name" \
     >/dev/null 2>&1
+}
+
+discover_service_stacks() {
+  local stack_prefix="${PROJECT_NAME}-${ENVIRONMENT}-"
+
+  # Service stacks use the project/environment prefix. Exclude the root
+  # stack and its nested-stack physical names, which share that prefix.
+  aws cloudformation list-stacks \
+    --region "$REGION" \
+    --query "StackSummaries[?starts_with(StackName, '${stack_prefix}') && StackName != '${ROOT_STACK_NAME}' && !starts_with(StackName, '${ROOT_STACK_NAME}-')].StackName" \
+    --output text | tr '\t' '\n'
 }
 
 delete_stack() {
@@ -89,8 +90,18 @@ wait_for_stack_delete() {
 echo "Environment: $ENVIRONMENT"
 echo "Region: $REGION"
 
+mapfile -t SERVICE_STACKS < <(discover_service_stacks)
+
 echo
-echo "Deleting service stacks..."
+if [[ "${#SERVICE_STACKS[@]}" -eq 0 || -z "${SERVICE_STACKS[0]}" ]]; then
+  echo "No external service stacks found."
+  SERVICE_STACKS=()
+else
+  echo "Discovered service stacks:"
+  printf '  %s\n' "${SERVICE_STACKS[@]}"
+  echo
+  echo "Deleting service stacks..."
+fi
 
 for stack in "${SERVICE_STACKS[@]}"; do
   delete_stack "$stack"
