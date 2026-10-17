@@ -318,6 +318,7 @@ Conditions:
     Fn::And:
       - Condition: VPCEnabled
       - Condition: ECSClusterEnabled
+      - Condition: LoadBalancerEnabled
       - Condition: ObservabilityEnabled
 
 
@@ -466,6 +467,7 @@ Resources:
     Condition: ObservabilityEnabledEffective
     DependsOn:
       - ECSCluster
+      - ApplicationLoadBalancer
     Properties:
       TemplateURL: ../../cloudformation/modules/observability.yaml
 
